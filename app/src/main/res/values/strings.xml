@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pokemon Guess Who</string>
+    <string name="start_game">Start Game</string>
+    <string name="your_pokemon">Your Pokemon</string>
+    <string name="toggle_eliminated">Toggle Eliminated</string>
+    <string name="grid_layout">Grid Layout</string>
+    <string name="loading">Loading Pokemon...</string>
+    <string name="error">Error: %s</string>
+    <string name="find_players">Find Players</string>
+    <string name="host_game">Host Game</string>
+    <string name="join_game">Join Game</string>
+    <string name="waiting_for_opponent">Waiting for opponent...</string>
+    <string name="game_in_progress">Game in Progress</string>
+</resources>

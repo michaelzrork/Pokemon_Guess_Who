@@ -1,0 +1,35 @@
+SOUND ASSETS GUIDE
+==================
+
+To add sound effects to your Pokemon Guess Who game, add the following files to:
+res/raw/
+
+Recommended Sound Files:
+1. card_flip.mp3 - Played when player flips/selects a card
+2. eliminate.mp3 - Played when marking a card as eliminated  
+3. win.mp3 - Played when game is won
+4. game_over.mp3 - Played when game ends
+
+You can find free Pokemon sound effects from:
+- Freesound.org (https://freesound.org)
+- Pokemon Fandom Wiki (https://pokemon.fandom.com/)
+- Zapsplat (https://www.zapsplat.com)
+
+Once you add the sound files:
+1. Place them in app/src/main/res/raw/
+2. The SoundManager class will automatically load and play them
+3. Call the appropriate method:
+   - soundManager.playCardFlip()
+   - soundManager.playCardEliminate()
+   - soundManager.playGameWin()
+   - soundManager.playGameOver()
+
+Format Requirements:
+- Format: MP3 or WAV
+- Sample Rate: 44100 Hz or 48000 Hz
+- Bitrate: 128-320 kbps
+- Duration: Keep under 3 seconds for quick feedback
+
+Add to SoundManager usage in GameScreen:
+    viewModel.togglePokemonElimination(pokemon)
+    soundManager.playCardEliminate()  // Add this line
