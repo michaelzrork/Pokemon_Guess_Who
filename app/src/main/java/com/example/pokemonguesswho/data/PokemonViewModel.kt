@@ -153,6 +153,8 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
      */
     fun startNewGame() {
         viewModelScope.launch {
+            // Clear any previous board so navigation doesn't trigger early
+            _gameState.value = GameState()
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value

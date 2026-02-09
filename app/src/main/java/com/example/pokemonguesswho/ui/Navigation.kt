@@ -26,15 +26,20 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
 
-    // Auto-navigate from client lobby to game when connected and board is populated
+    // Auto-navigate to game when board is populated (from main menu or client lobby)
     LaunchedEffect(lobbyState, gameState.board.size) {
-        if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty()) {
-            val currentRoute = navController.currentDestination?.route
-            if (currentRoute == Screen.ClientLobby.route) {
-                navController.navigate(Screen.Game.route) {
-                    popUpTo(Screen.MainMenu.route) { inclusive = false }
-                    launchSingleTop = true
-                }
+        val currentRoute = navController.currentDestination?.route
+        // Client lobby → game when connected and board ready
+        if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty() && currentRoute == Screen.ClientLobby.route) {
+            navController.navigate(Screen.Game.route) {
+                popUpTo(Screen.MainMenu.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+        // Main menu → game when host board is ready (after shuffle completes)
+        if (gameState.board.isNotEmpty() && gameState.isHost && currentRoute == Screen.MainMenu.route) {
+            navController.navigate(Screen.Game.route) {
+                launchSingleTop = true
             }
         }
     }
@@ -48,9 +53,8 @@ fun AppNavigation(viewModel: PokemonViewModel) {
                 viewModel = viewModel,
                 onStartGame = {
                     viewModel.startNewGame()
-                    navController.navigate(Screen.Game.route) {
-                        launchSingleTop = true
-                    }
+                    // Navigation happens automatically via LaunchedEffect
+                    // once the board is populated (after shuffle completes)
                 },
                 onJoinGame = {
                     viewModel.startJoinGame()
