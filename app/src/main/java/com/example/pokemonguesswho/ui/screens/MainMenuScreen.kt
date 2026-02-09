@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +30,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -113,7 +121,15 @@ fun MainMenuScreen(
                 }
 
                 else -> {
-                    Box(modifier = Modifier.size(16.dp))
+                    // Pokeball
+                    PokeballIcon(modifier = Modifier.size(120.dp))
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Game Logo
+                    GameLogo()
+
+                    Spacer(modifier = Modifier.height(32.dp))
 
                     // Resume Game Button (only shown if there's a saved game)
                     if (hasSavedGame) {
@@ -224,5 +240,143 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
                 }
             }
         } ?: CircularProgressIndicator(color = Color(0xFFFFEB3B))
+    }
+}
+
+@Composable
+fun PokeballIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+        val radius = w / 2f
+        val strokeWidth = w * 0.04f
+        val bandHeight = h * 0.06f
+
+        // Outer circle - dark outline
+        drawCircle(
+            color = Color(0xFF2D2D2D),
+            radius = radius,
+            style = Fill
+        )
+
+        // Top half - red
+        drawArc(
+            color = Color(0xFFFF1C1C),
+            startAngle = 180f,
+            sweepAngle = 180f,
+            useCenter = true,
+            size = size
+        )
+
+        // Bottom half - white
+        drawArc(
+            color = Color.White,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = true,
+            size = size
+        )
+
+        // Center band - dark
+        drawLine(
+            color = Color(0xFF2D2D2D),
+            start = Offset(0f, cy),
+            end = Offset(w, cy),
+            strokeWidth = bandHeight,
+            cap = StrokeCap.Butt
+        )
+
+        // Outer ring
+        drawCircle(
+            color = Color(0xFF2D2D2D),
+            radius = radius,
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Center button - outer ring
+        drawCircle(
+            color = Color(0xFF2D2D2D),
+            radius = radius * 0.22f,
+            center = Offset(cx, cy),
+            style = Fill
+        )
+
+        // Center button - white fill
+        drawCircle(
+            color = Color.White,
+            radius = radius * 0.15f,
+            center = Offset(cx, cy),
+            style = Fill
+        )
+
+        // Center button - inner ring
+        drawCircle(
+            color = Color(0xFF2D2D2D),
+            radius = radius * 0.15f,
+            center = Offset(cx, cy),
+            style = Stroke(width = strokeWidth * 0.6f)
+        )
+
+        // Highlight on top-left for 3D effect
+        drawCircle(
+            color = Color.White.copy(alpha = 0.25f),
+            radius = radius * 0.35f,
+            center = Offset(cx - radius * 0.2f, cy - radius * 0.35f),
+            style = Fill
+        )
+    }
+}
+
+@Composable
+fun GameLogo() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // "POKEMON" text
+        Text(
+            text = "POKEMON",
+            style = TextStyle(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 6.sp,
+                color = Color(0xFFFFEB3B),
+                shadow = Shadow(
+                    color = Color(0xFF3700B3),
+                    offset = Offset(2f, 2f),
+                    blurRadius = 4f
+                )
+            )
+        )
+        // "GUESS WHO" text - bigger, more prominent
+        Text(
+            text = "GUESS WHO",
+            style = TextStyle(
+                fontSize = 38.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 3.sp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFFEB3B),
+                        Color(0xFFFFC107),
+                        Color(0xFFFF9800)
+                    )
+                ),
+                shadow = Shadow(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    offset = Offset(3f, 3f),
+                    blurRadius = 6f
+                )
+            )
+        )
+        // Subtle tagline
+        Text(
+            text = "Gotta Guess 'Em All!",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White.copy(alpha = 0.6f),
+            letterSpacing = 2.sp
+        )
     }
 }

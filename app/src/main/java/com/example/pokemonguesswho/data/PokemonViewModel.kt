@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
@@ -165,7 +166,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
 
             val allPokemon = _pokemonList.value
 
-            // Generate board and start BT in background while animation plays
+            // Generate board while animation plays
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
 
@@ -175,7 +176,8 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 delay(250)
             }
 
-            // Set board data FIRST (so when isShuffling goes false, board is ready)
+            // Set board data and clear shuffling atomically — navigation triggers immediately
+            _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
                 myPokemon = myPokemon,
@@ -184,14 +186,14 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 isHost = true
             )
             saveGameState()
+            _isShuffling.value = false
 
-            // Start Bluetooth server and wait for opponent
+            // Yield to let compose process the state change and navigate before BT setup
+            yield()
+
+            // Start Bluetooth AFTER navigation has triggered (don't block the transition)
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
             startBluetoothServer()
-
-            // THEN clear shuffling — LaunchedEffect will see board + !isShuffling and navigate
-            _shuffleDisplayPokemon.value = null
-            _isShuffling.value = false
         }
     }
 
