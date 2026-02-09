@@ -176,7 +176,8 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 delay(250)
             }
 
-            // Set board data and clear shuffling atomically — navigation triggers immediately
+            // Set board while isShuffling is still true — Navigation LaunchedEffect
+            // will see board + isHost + isShuffling and navigate BEFORE we show the menu
             _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
@@ -186,12 +187,12 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 isHost = true
             )
             saveGameState()
+
+            // Yield to let navigation process, then clean up
+            yield()
             _isShuffling.value = false
 
-            // Yield to let compose process the state change and navigate before BT setup
-            yield()
-
-            // Start Bluetooth AFTER navigation has triggered (don't block the transition)
+            // Start Bluetooth AFTER navigation has triggered
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
             startBluetoothServer()
         }
