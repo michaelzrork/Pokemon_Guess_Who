@@ -5,29 +5,43 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Red top half -->
+    <!-- Pokeball drawn as a circle centered at 54,54 with radius 30 -->
+    <!-- This sits within the adaptive icon safe zone (24,24 to 84,84) -->
+
+    <!-- Black circle outline (slightly larger) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 54,54 m -32,0 a 32,32 0 1,0 64,0 a 32,32 0 1,0 -64,0" />
+
+    <!-- Red top half (semicircle) -->
     <path
         android:fillColor="#E53935"
-        android:pathData="M 0,0 L 108,0 L 108,54 L 0,54 Z" />
+        android:pathData="M 22,54 A 32,32 0 0,1 86,54 Z" />
 
-    <!-- White bottom half -->
+    <!-- White bottom half (semicircle) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 0,54 L 108,54 L 108,108 L 0,108 Z" />
+        android:pathData="M 22,54 A 32,32 0 0,0 86,54 Z" />
 
-    <!-- Black stripe -->
+    <!-- Black center stripe -->
     <path
         android:fillColor="#000000"
-        android:pathData="M 0,52 L 108,52 L 108,56 L 0,56 Z" />
+        android:pathData="M 22,51.5 L 86,51.5 L 86,56.5 L 22,56.5 Z" />
 
-    <!-- Black circle outline -->
+    <!-- Black outer ring of center button -->
     <path
         android:fillColor="#000000"
-        android:pathData="M 54,54 m -14,0 a 14,14 0 1,0 28,0 a 14,14 0 1,0 -28,0" />
+        android:pathData="M 54,54 m -11,0 a 11,11 0 1,0 22,0 a 11,11 0 1,0 -22,0" />
 
-    <!-- White inner circle -->
+    <!-- White inner circle of center button -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 m -10,0 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0" />
+        android:pathData="M 54,54 m -7,0 a 7,7 0 1,0 14,0 a 7,7 0 1,0 -14,0" />
+
+    <!-- Black inner ring of center button -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 54,54 m -7,0 a 7,7 0 1,0 14,0 a 7,7 0 1,0 -14,0"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF" />
 </vector>
-

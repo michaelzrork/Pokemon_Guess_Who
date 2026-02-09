@@ -273,7 +273,7 @@ fun MyPokemonTopBar(
                 }
             }
 
-            // Type glossary
+            // Type glossary — 4x4 grid
             Text(
                 text = "TYPE GLOSSARY",
                 fontSize = 10.sp,
@@ -281,13 +281,20 @@ fun MyPokemonTopBar(
                 color = Color(0xFFFFD700),
                 letterSpacing = 1.sp
             )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                allPokemonTypes.forEach { type ->
-                    TypeGlossaryChip(type = type)
+            // 4 rows of 4 types each
+            allPokemonTypes.chunked(4).forEach { rowTypes ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    rowTypes.forEach { type ->
+                        TypeGlossaryChip(
+                            type = type,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(3.dp))
             }
         }
     }
@@ -300,17 +307,19 @@ private val allPokemonTypes = listOf(
 )
 
 @Composable
-private fun TypeGlossaryChip(type: String) {
+private fun TypeGlossaryChip(type: String, modifier: Modifier = Modifier) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        TypeIcon(type = type, size = 14.dp)
+        TypeIcon(type = type, size = 12.dp)
         Text(
-            text = type.take(3).uppercase(),
+            text = type,
             fontSize = 8.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White.copy(alpha = 0.85f)
+            color = Color.White.copy(alpha = 0.85f),
+            maxLines = 1
         )
     }
 }
