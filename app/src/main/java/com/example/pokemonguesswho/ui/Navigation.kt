@@ -1,6 +1,5 @@
 package com.example.pokemonguesswho.ui
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,28 +26,27 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
+    val navigateToGame by viewModel.navigateToGame.collectAsState()
 
-    // Auto-navigate to game when board is populated
+    // Host flow: one-shot navigation event fires after board is set
+    // (isShuffling stays true so MainMenuScreen keeps showing "Loading..." — no flash)
+    LaunchedEffect(navigateToGame) {
+        if (navigateToGame) {
+            navController.navigate(Screen.Game.route) {
+                launchSingleTop = true
+            }
+            viewModel.onNavigatedToGame()
+        }
+    }
+
+    // Client flow: navigate from lobby → game when connected and board ready
     LaunchedEffect(lobbyState, gameState.board.size, isShuffling) {
         val currentRoute = navController.currentDestination?.route
-        Log.d("GameFlow", "NAV LaunchedEffect: lobbyState=$lobbyState, boardSize=${gameState.board.size}, isHost=${gameState.isHost}, isShuffling=$isShuffling, currentRoute=$currentRoute")
-
-        // Client lobby → game when connected and board ready
         if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty() && !isShuffling && currentRoute == Screen.ClientLobby.route) {
-            Log.d("GameFlow", "NAV: Client lobby → Game (connected + board ready)")
             navController.navigate(Screen.Game.route) {
                 popUpTo(Screen.MainMenu.route) { inclusive = false }
                 launchSingleTop = true
             }
-        }
-        // Main menu → game when host board is ready (navigate while still showing loading animation)
-        if (gameState.board.isNotEmpty() && gameState.isHost && isShuffling && currentRoute == Screen.MainMenu.route) {
-            Log.d("GameFlow", "NAV: Main menu → Game (host board ready, isShuffling still true)")
-            navController.navigate(Screen.Game.route) {
-                launchSingleTop = true
-            }
-        } else if (gameState.board.isNotEmpty() && gameState.isHost && currentRoute == Screen.MainMenu.route) {
-            Log.d("GameFlow", "NAV: Host board ready but condition NOT met: isShuffling=$isShuffling")
         }
     }
 

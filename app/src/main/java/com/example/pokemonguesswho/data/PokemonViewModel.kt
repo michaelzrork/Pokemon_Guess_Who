@@ -2,7 +2,6 @@ package com.example.pokemonguesswho.data
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
@@ -23,7 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
@@ -93,6 +91,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     // Expose connected device name
     val connectedDeviceName: StateFlow<String?> = bluetoothManager.connectedDeviceName
 
+    // One-shot navigation event: set to true when host board is ready and we should navigate
+    private val _navigateToGame = MutableStateFlow(false)
+    val navigateToGame: StateFlow<Boolean> = _navigateToGame.asStateFlow()
+
     // "Player Found!" notification for host game screen overlay
     private val _opponentFoundMessage = MutableStateFlow<String?>(null)
     val opponentFoundMessage: StateFlow<String?> = _opponentFoundMessage.asStateFlow()
@@ -161,28 +163,25 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
      */
     fun startNewGame() {
         viewModelScope.launch {
-            Log.d("GameFlow", "startNewGame: clearing board, setting isShuffling=true")
             // Clear any previous board so navigation doesn't trigger early
             _gameState.value = GameState()
+            _navigateToGame.value = false
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value
-            Log.d("GameFlow", "startNewGame: pokemonList size=${allPokemon.size}")
 
             // Generate board while animation plays
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
-            Log.d("GameFlow", "startNewGame: board generated, size=${board.size}, myPokemon=${myPokemon.name}")
 
             // Loading animation — cycle through random Pokemon at a readable pace
             repeat(15) {
                 _shuffleDisplayPokemon.value = allPokemon.random()
                 delay(250)
             }
-            Log.d("GameFlow", "startNewGame: animation done, about to set board. isShuffling=${_isShuffling.value}")
 
-            // Set board while isShuffling is still true — Navigation LaunchedEffect
-            // will see board + isHost + isShuffling and navigate BEFORE we show the menu
+            // Set board while isShuffling is still true — MainMenuScreen keeps
+            // showing the loading animation. Then fire the one-shot navigation event.
             _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
@@ -192,19 +191,15 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 isHost = true
             )
             saveGameState()
-            Log.d("GameFlow", "startNewGame: board set. board.size=${_gameState.value.board.size}, isHost=${_gameState.value.isHost}, isShuffling=${_isShuffling.value}")
 
-            // Yield to let navigation process, then clean up
-            Log.d("GameFlow", "startNewGame: yielding for navigation")
-            yield()
-            Log.d("GameFlow", "startNewGame: after yield, setting isShuffling=false")
-            _isShuffling.value = false
+            // Fire one-shot navigation event. isShuffling stays true so MainMenuScreen
+            // keeps showing "Loading..." until navigation completes.
+            // Navigation.kt will call onNavigatedToGame() which clears both flags.
+            _navigateToGame.value = true
 
-            // Start Bluetooth AFTER navigation has triggered
-            Log.d("GameFlow", "startNewGame: starting BT server")
+            // Start Bluetooth server (non-blocking — runs in background)
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
             startBluetoothServer()
-            Log.d("GameFlow", "startNewGame: BT server started, done")
         }
     }
 
@@ -357,6 +352,12 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         saveGameState()
     }
 
+    /** Called by Navigation after it has consumed the navigate-to-game event */
+    fun onNavigatedToGame() {
+        _navigateToGame.value = false
+        _isShuffling.value = false
+    }
+
     fun resetLobby() {
         bluetoothManager.disconnect()
         _lobbyState.value = LobbyState.IDLE
@@ -419,6 +420,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         bluetoothManager.disconnect()
         _gameState.value = GameState()
         _lobbyState.value = LobbyState.IDLE
+        _navigateToGame.value = false
     }
 
     override fun onCleared() {
