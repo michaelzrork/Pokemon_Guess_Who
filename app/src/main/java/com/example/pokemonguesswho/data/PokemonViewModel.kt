@@ -91,10 +91,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     // Expose connected device name
     val connectedDeviceName: StateFlow<String?> = bluetoothManager.connectedDeviceName
 
-    // One-shot navigation event: set to true when host board is ready and we should navigate
-    private val _navigateToGame = MutableStateFlow(false)
-    val navigateToGame: StateFlow<Boolean> = _navigateToGame.asStateFlow()
-
     // "Player Found!" notification for host game screen overlay
     private val _opponentFoundMessage = MutableStateFlow<String?>(null)
     val opponentFoundMessage: StateFlow<String?> = _opponentFoundMessage.asStateFlow()
@@ -163,9 +159,8 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
      */
     fun startNewGame() {
         viewModelScope.launch {
-            // Clear any previous board so navigation doesn't trigger early
+            // Clear any previous board
             _gameState.value = GameState()
-            _navigateToGame.value = false
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value
@@ -175,13 +170,14 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             val myPokemon = board.random()
 
             // Loading animation — cycle through random Pokemon at a readable pace
+            // (GameScreenUpdated shows this while isShuffling is true)
             repeat(15) {
                 _shuffleDisplayPokemon.value = allPokemon.random()
                 delay(250)
             }
 
-            // Set board while isShuffling is still true — MainMenuScreen keeps
-            // showing the loading animation. Then fire the one-shot navigation event.
+            // Animation done — set the board and stop shuffling.
+            // GameScreenUpdated will transition from loading animation to game board.
             _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
@@ -191,13 +187,9 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 isHost = true
             )
             saveGameState()
+            _isShuffling.value = false
 
-            // Fire one-shot navigation event. isShuffling stays true so MainMenuScreen
-            // keeps showing "Loading..." until navigation completes.
-            // Navigation.kt will call onNavigatedToGame() which clears both flags.
-            _navigateToGame.value = true
-
-            // Start Bluetooth server (non-blocking — runs in background)
+            // Start Bluetooth server for opponent to join
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
             startBluetoothServer()
         }
@@ -352,12 +344,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         saveGameState()
     }
 
-    /** Called by Navigation after it has consumed the navigate-to-game event */
-    fun onNavigatedToGame() {
-        _navigateToGame.value = false
-        _isShuffling.value = false
-    }
-
     fun resetLobby() {
         bluetoothManager.disconnect()
         _lobbyState.value = LobbyState.IDLE
@@ -420,7 +406,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         bluetoothManager.disconnect()
         _gameState.value = GameState()
         _lobbyState.value = LobbyState.IDLE
-        _navigateToGame.value = false
     }
 
     override fun onCleared() {

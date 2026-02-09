@@ -26,18 +26,6 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
-    val navigateToGame by viewModel.navigateToGame.collectAsState()
-
-    // Host flow: one-shot navigation event fires after board is set
-    // (isShuffling stays true so MainMenuScreen keeps showing "Loading..." — no flash)
-    LaunchedEffect(navigateToGame) {
-        if (navigateToGame) {
-            navController.navigate(Screen.Game.route) {
-                launchSingleTop = true
-            }
-            viewModel.onNavigatedToGame()
-        }
-    }
 
     // Client flow: navigate from lobby → game when connected and board ready
     LaunchedEffect(lobbyState, gameState.board.size, isShuffling) {
@@ -59,8 +47,11 @@ fun AppNavigation(viewModel: PokemonViewModel) {
                 viewModel = viewModel,
                 onStartGame = {
                     viewModel.startNewGame()
-                    // Navigation happens automatically via LaunchedEffect
-                    // once the board is populated (after shuffle completes)
+                    // Navigate immediately — GameScreenUpdated shows loading
+                    // animation while isShuffling is true (no menu flash)
+                    navController.navigate(Screen.Game.route) {
+                        launchSingleTop = true
+                    }
                 },
                 onJoinGame = {
                     viewModel.startJoinGame()

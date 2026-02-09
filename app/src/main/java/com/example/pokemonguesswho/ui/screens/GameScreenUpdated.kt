@@ -56,7 +56,22 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val opponentFoundMessage by viewModel.opponentFoundMessage.collectAsState()
+    val isShuffling by viewModel.isShuffling.collectAsState()
+    val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val gameManager = GameManager()
+
+    // Show loading animation while shuffling (host navigates here immediately)
+    if (isShuffling) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF6200EE)),
+            contentAlignment = Alignment.Center
+        ) {
+            ShufflingAnimation(pokemon = shuffleDisplayPokemon)
+        }
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(

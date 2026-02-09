@@ -56,10 +56,7 @@ fun MainMenuScreen(
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val loadingProgress by viewModel.loadingProgress.collectAsState()
-    val isShuffling by viewModel.isShuffling.collectAsState()
-    val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val navigateToGame by viewModel.navigateToGame.collectAsState()
     val hasSavedGame = viewModel.hasSavedGame()
 
     Box(
@@ -105,11 +102,6 @@ fun MainMenuScreen(
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.6f)
                     )
-                }
-
-                isShuffling || navigateToGame -> {
-                    // Shuffling animation (also shown while navigation is in flight)
-                    ShufflingAnimation(pokemon = shuffleDisplayPokemon)
                 }
 
                 errorMessage != null -> {
