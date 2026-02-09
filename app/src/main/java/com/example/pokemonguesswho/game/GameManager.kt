@@ -17,7 +17,8 @@ data class GameState(
 class GameManager {
     
     fun generateGameBoard(pokemonList: List<GamePokemon>, boardSize: Int = 24): List<GamePokemon> {
-        val availablePokemon = pokemonList.shuffle().take(boardSize)
+        val shuffled = pokemonList.toMutableList().apply { shuffle() }
+        val availablePokemon = shuffled.take(boardSize)
         return availablePokemon.map { it.copy(isEliminated = false) }
     }
     
@@ -27,7 +28,7 @@ class GameManager {
     
     fun getVisiblePokemon(board: List<GamePokemon>, showEliminated: Boolean): List<GamePokemon> {
         return if (showEliminated) {
-            board.sortedBy { it.isEliminated }
+            board
         } else {
             board.filter { !it.isEliminated }
         }

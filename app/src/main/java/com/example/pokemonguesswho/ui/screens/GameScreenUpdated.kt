@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +36,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,7 +61,7 @@ fun GameScreenUpdated(viewModel: PokemonViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val gameManager = GameManager()
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -88,29 +93,26 @@ fun GameScreenUpdated(viewModel: PokemonViewModel) {
         } else {
             // Header with game controls
             GameHeaderUpdated(
-                onGridColumnsChange = { viewModel.setGridColumns(it) },
                 onToggleEliminated = { viewModel.toggleShowEliminated() },
-                showEliminated = gameState.showEliminated,
-                currentColumns = gameState.gridColumns,
-                totalCards = gameState.board.size
+                showEliminated = gameState.showEliminated
             )
-            
+
             // Selected Pokemon section
             if (gameState.selectedPokemon != null && gameState.selectedPokemon!!.name.isNotEmpty()) {
                 SelectedPokemonSectionUpdated(
                     pokemon = gameState.selectedPokemon!!,
-                    onDeselect = { 
+                    onDeselect = {
                         viewModel.selectPokemon(GamePokemon(
                             pokemonId = 0,
                             name = "",
                             imageUrl = "",
                             types = emptyList()
-                        )) 
+                        ))
                     }
                 )
             }
-            
-            // Main game board
+
+            // Main game board with pinch-to-zoom
             PokemonGridUpdated(
                 pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
                 selectedPokemon = gameState.selectedPokemon,
@@ -119,6 +121,7 @@ fun GameScreenUpdated(viewModel: PokemonViewModel) {
                 },
                 onCardSelect = { pokemon -> viewModel.selectPokemon(pokemon) },
                 gridColumns = gameState.gridColumns,
+                onGridColumnsChange = { viewModel.setGridColumns(it) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -130,11 +133,8 @@ fun GameScreenUpdated(viewModel: PokemonViewModel) {
 
 @Composable
 fun GameHeaderUpdated(
-    onGridColumnsChange: (Int) -> Unit,
     onToggleEliminated: () -> Unit,
-    showEliminated: Boolean,
-    currentColumns: Int,
-    totalCards: Int
+    showEliminated: Boolean
 ) {
     Card(
         modifier = Modifier
@@ -157,18 +157,17 @@ fun GameHeaderUpdated(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
-            
+
             // Control buttons
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Toggle eliminated cards
                 Button(
                     onClick = onToggleEliminated,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(4.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Icon(
                         imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
@@ -176,32 +175,7 @@ fun GameHeaderUpdated(
                         modifier = Modifier.padding(end = 4.dp),
                         tint = Color.White
                     )
-                    Text(if (showEliminated) "Hide X" else "Show X", fontSize = 10.sp)
-                }
-                
-                // Grid layout selector
-                androidx.compose.foundation.layout.Row(
-                    modifier = Modifier
-                        .weight(2f)
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val availableColumns = (1..6).filter { it <= totalCards }
-                    availableColumns.forEach { col ->
-                        Button(
-                            onClick = { onGridColumnsChange(col) },
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .height(36.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (col == currentColumns) Color(0xFF6200EE) else Color(0xFFBBBBBB)
-                            ),
-                            contentPadding = PaddingValues(4.dp)
-                        ) {
-                            Text(col.toString(), fontSize = 10.sp)
-                        }
-                    }
+                    Text(if (showEliminated) "Hide X" else "Show X", fontSize = 12.sp)
                 }
             }
         }
@@ -214,7 +188,7 @@ fun SelectedPokemonSectionUpdated(
     onDeselect: () -> Unit
 ) {
     if (pokemon.name.isEmpty()) return
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -255,7 +229,7 @@ fun SelectedPokemonSectionUpdated(
                     contentScale = ContentScale.Fit
                 )
             }
-            
+
             IconButton(
                 onClick = onDeselect,
                 modifier = Modifier.align(Alignment.TopEnd)
@@ -273,14 +247,39 @@ fun PokemonGridUpdated(
     onCardClick: (GamePokemon) -> Unit,
     onCardSelect: (GamePokemon) -> Unit,
     gridColumns: Int,
+    onGridColumnsChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Track cumulative zoom scale for pinch gesture
+    var cumulativeScale by remember { mutableFloatStateOf(1f) }
+
     AnimatedContent(
         targetState = gridColumns,
         transitionSpec = {
             (fadeIn() + scaleIn(initialScale = 0.95f)) togetherWith (fadeOut() + scaleOut(targetScale = 0.95f))
         },
-        modifier = modifier,
+        modifier = modifier
+            .pointerInput(gridColumns) {
+                detectTransformGestures { _, _, zoom, _ ->
+                    cumulativeScale *= zoom
+                    // Pinch out (zoom in) → fewer columns when threshold crossed
+                    if (cumulativeScale > 1.4f) {
+                        val newColumns = (gridColumns - 1).coerceIn(1, 6)
+                        if (newColumns != gridColumns) {
+                            onGridColumnsChange(newColumns)
+                        }
+                        cumulativeScale = 1f
+                    }
+                    // Pinch in (zoom out) → more columns when threshold crossed
+                    else if (cumulativeScale < 0.7f) {
+                        val newColumns = (gridColumns + 1).coerceIn(1, 6)
+                        if (newColumns != gridColumns) {
+                            onGridColumnsChange(newColumns)
+                        }
+                        cumulativeScale = 1f
+                    }
+                }
+            },
         label = "GridLayoutTransition"
     ) { columns ->
         LazyVerticalGrid(

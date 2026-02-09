@@ -34,5 +34,8 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         composable(Screen.Game.route) {
             GameScreenUpdated(viewModel)
         }
+        composable(Screen.Multiplayer.route) {
+            GameScreenUpdated(viewModel)
+        }
     }
 }

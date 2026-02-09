@@ -29,11 +29,7 @@ fun MainMenuScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = androidx.compose.foundation.background(
-                    color = Color(0xFF6200EE)
-                )
-            )
+            .background(color = Color(0xFF6200EE))
     ) {
         Column(
             modifier = Modifier
@@ -92,7 +88,7 @@ fun MainMenuScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    "Multiplayer (Coming Soon)",
+                    "Multiplayer",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(12.dp),

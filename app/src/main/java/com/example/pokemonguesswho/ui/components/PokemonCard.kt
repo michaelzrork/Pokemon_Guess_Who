@@ -87,11 +87,7 @@ fun PokemonCard(
                 )
                 
                 // Elimination indicator
-                AnimatedVisibility(
-                    visible = pokemon.isEliminated,
-                    enter = scaleIn(),
-                    exit = scaleOut()
-                ) {
+                if (pokemon.isEliminated) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

@@ -40,11 +40,10 @@ fun PokemonCardComponent(
 ) {
     val eliminatedAlpha = if (pokemon.isEliminated) 0.5f else 1f
     val elevationDp = if (isSelected) 12.dp else 4.dp
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.7f)
             .clickable { onCardClick(pokemon) }
             .alpha(eliminatedAlpha),
         elevation = CardDefaults.cardElevation(
@@ -58,7 +57,7 @@ fun PokemonCardComponent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Pokemon Name
@@ -69,7 +68,7 @@ fun PokemonCardComponent(
                 textAlign = TextAlign.Center,
                 maxLines = 2
             )
-            
+
             // Pokemon Image
             Box(
                 modifier = Modifier
@@ -86,13 +85,9 @@ fun PokemonCardComponent(
                         .aspectRatio(1f),
                     contentScale = ContentScale.Fit
                 )
-                
+
                 // Elimination indicator
-                AnimatedVisibility(
-                    visible = pokemon.isEliminated,
-                    enter = scaleIn(),
-                    exit = scaleOut()
-                ) {
+                if (pokemon.isEliminated) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -112,30 +107,42 @@ fun PokemonCardComponent(
                     }
                 }
             }
-            
+
             // Types
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(4.dp),
+                    .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
                 pokemon.types.forEach { type ->
                     TypeBadgeComponent(type)
-                    Spacer(modifier = Modifier.padding(2.dp))
+                    Spacer(modifier = Modifier.padding(1.dp))
                 }
             }
-            
-            // Stats
+
+            // Stats - Row 1: HP, ATK, DEF
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(4.dp),
+                    .padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 StatBoxComponent("HP", pokemon.hp)
                 StatBoxComponent("ATK", pokemon.attack)
                 StatBoxComponent("DEF", pokemon.defense)
+            }
+
+            // Stats - Row 2: SP.ATK, SP.DEF, SPD
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatBoxComponent("SATK", pokemon.spAtk)
+                StatBoxComponent("SDEF", pokemon.spDef)
+                StatBoxComponent("SPD", pokemon.speed)
             }
         }
     }
@@ -145,7 +152,7 @@ fun PokemonCardComponent(
 fun TypeBadgeComponent(type: String) {
     val typeColor = getTypeColor(type)
     Card(
-        modifier = Modifier.padding(2.dp),
+        modifier = Modifier.padding(1.dp),
         shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(containerColor = typeColor)
     ) {
@@ -163,16 +170,17 @@ fun TypeBadgeComponent(type: String) {
 fun StatBoxComponent(label: String, value: Int) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(2.dp)
+        modifier = Modifier.padding(1.dp)
     ) {
         Text(
             text = label,
-            fontSize = 8.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.DarkGray
         )
         Text(
             text = value.toString(),
-            fontSize = 10.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF2196F3)
         )
