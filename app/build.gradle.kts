@@ -80,9 +80,6 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Bluetooth & Networking
-    implementation("androidx.bluetooth:bluetooth:1.1.0")
-
     // JSON Serialization
     implementation("com.google.code.gson:gson:2.10.1")
 
