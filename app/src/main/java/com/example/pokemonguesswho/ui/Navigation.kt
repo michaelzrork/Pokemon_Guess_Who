@@ -1,5 +1,6 @@
 package com.example.pokemonguesswho.ui
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,8 +31,11 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     // Auto-navigate to game when board is populated
     LaunchedEffect(lobbyState, gameState.board.size, isShuffling) {
         val currentRoute = navController.currentDestination?.route
+        Log.d("GameFlow", "NAV LaunchedEffect: lobbyState=$lobbyState, boardSize=${gameState.board.size}, isHost=${gameState.isHost}, isShuffling=$isShuffling, currentRoute=$currentRoute")
+
         // Client lobby → game when connected and board ready
         if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty() && !isShuffling && currentRoute == Screen.ClientLobby.route) {
+            Log.d("GameFlow", "NAV: Client lobby → Game (connected + board ready)")
             navController.navigate(Screen.Game.route) {
                 popUpTo(Screen.MainMenu.route) { inclusive = false }
                 launchSingleTop = true
@@ -39,9 +43,12 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         }
         // Main menu → game when host board is ready (navigate while still showing loading animation)
         if (gameState.board.isNotEmpty() && gameState.isHost && isShuffling && currentRoute == Screen.MainMenu.route) {
+            Log.d("GameFlow", "NAV: Main menu → Game (host board ready, isShuffling still true)")
             navController.navigate(Screen.Game.route) {
                 launchSingleTop = true
             }
+        } else if (gameState.board.isNotEmpty() && gameState.isHost && currentRoute == Screen.MainMenu.route) {
+            Log.d("GameFlow", "NAV: Host board ready but condition NOT met: isShuffling=$isShuffling")
         }
     }
 
