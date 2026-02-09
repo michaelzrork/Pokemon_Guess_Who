@@ -196,133 +196,97 @@ fun MyPokemonTopBar(
     onToggleEliminated: () -> Unit,
     onEndGame: () -> Unit = {}
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
+            .background(Color(0xFF6200EE))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Column {
+        // Your Pokemon card — same as board cards, with gold border + label
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "YOUR POKEMON",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFD700),
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Box(modifier = Modifier.width(110.dp)) {
+                PokemonCardComponent(
+                    pokemon = pokemon,
+                    onCardClick = { },
+                    isSelected = true,
+                    compact = false
+                )
+            }
+        }
+
+        // Type glossary + action buttons
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Action buttons row
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Pokemon card — 50% taller
-                Box(
-                    modifier = Modifier
-                        .width(80.dp)
-                        .height(160.dp)
+                FilledIconButton(
+                    onClick = onToggleEliminated,
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (showEliminated)
+                            Color.White.copy(alpha = 0.2f)
+                        else
+                            Color.White.copy(alpha = 0.35f)
+                    )
                 ) {
-                    PokemonCardComponent(
-                        pokemon = pokemon,
-                        onCardClick = { },
-                        isSelected = true,
-                        compact = true
+                    Icon(
+                        imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
                     )
                 }
-
-                // Name + stats + action buttons
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = pokemon.name,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.DarkGray
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            // Hide/Show eliminated toggle button
-                            FilledIconButton(
-                                onClick = onToggleEliminated,
-                                modifier = Modifier.size(30.dp),
-                                shape = CircleShape,
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = if (showEliminated)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                            // End Game button
-                            FilledIconButton(
-                                onClick = onEndGame,
-                                modifier = Modifier.size(30.dp),
-                                shape = CircleShape,
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = Color(0xFFE53935)
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "End Game",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-                    // Stats
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatChip("HP", pokemon.hp)
-                        StatChip("ATK", pokemon.attack)
-                        StatChip("DEF", pokemon.defense)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatChip("SpA", pokemon.spAtk)
-                        StatChip("SpD", pokemon.spDef)
-                        StatChip("SPD", pokemon.speed)
-                    }
-                    // Types
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        pokemon.types.forEach { type ->
-                            TypeIcon(type = type, size = 16.dp)
-                        }
-                        Text(
-                            text = pokemon.types.joinToString(" / "),
-                            fontSize = 10.sp,
-                            color = Color.Gray
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // Type glossary — horizontally scrollable
-                    Text(
-                        text = "TYPE GLOSSARY",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 1.sp
+                Spacer(modifier = Modifier.width(4.dp))
+                FilledIconButton(
+                    onClick = onEndGame,
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Color(0xFFE53935)
                     )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        allPokemonTypes.forEach { type ->
-                            TypeGlossaryChip(type = type)
-                        }
-                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "End Game",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // Type glossary
+            Text(
+                text = "TYPE GLOSSARY",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFD700),
+                letterSpacing = 1.sp
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                allPokemonTypes.forEach { type ->
+                    TypeGlossaryChip(type = type)
                 }
             }
         }
@@ -341,12 +305,12 @@ private fun TypeGlossaryChip(type: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        TypeIcon(type = type, size = 12.dp)
+        TypeIcon(type = type, size = 14.dp)
         Text(
             text = type.take(3).uppercase(),
-            fontSize = 7.sp,
+            fontSize = 8.sp,
             fontWeight = FontWeight.Bold,
-            color = getTypeColor(type)
+            color = Color.White.copy(alpha = 0.85f)
         )
     }
 }
@@ -387,13 +351,13 @@ private fun StatChip(label: String, value: Int) {
     ) {
         Text(
             text = label,
-            fontSize = 9.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = Color.Gray
         )
         Text(
             text = value.toString(),
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = Color.DarkGray
         )
