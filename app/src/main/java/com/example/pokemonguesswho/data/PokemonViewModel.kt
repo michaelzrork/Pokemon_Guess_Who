@@ -35,7 +35,6 @@ data class SavedGameData(
     val eliminatedIds: List<Int>,
     val myPokemonId: Int,
     val showEliminated: Boolean,
-    val cardSizeDp: Float,
     val isHost: Boolean
 )
 
@@ -183,7 +182,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 board = board,
                 myPokemon = myPokemon,
                 showEliminated = true,
-                cardSizeDp = 120f,
                 isHost = true
             )
             saveGameState()
@@ -310,7 +308,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     board = board,
                     myPokemon = myPokemon,
                     showEliminated = true,
-                    cardSizeDp = 120f,
                     isHost = false
                 )
                 saveGameState()
@@ -331,10 +328,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         }
         _gameState.value = _gameState.value.copy(board = newBoard)
         saveGameState()
-    }
-
-    fun setCardSize(size: Float) {
-        _gameState.value = _gameState.value.copy(cardSizeDp = size)
     }
 
     fun toggleShowEliminated() {
@@ -364,7 +357,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             eliminatedIds = state.board.filter { it.isEliminated }.map { it.pokemonId },
             myPokemonId = state.myPokemon.pokemonId,
             showEliminated = state.showEliminated,
-            cardSizeDp = state.cardSizeDp,
             isHost = state.isHost
         )
         prefs.edit().putString("saved_game", gson.toJson(savedData)).apply()
@@ -391,7 +383,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 board = board,
                 myPokemon = myPokemon,
                 showEliminated = savedData.showEliminated,
-                cardSizeDp = savedData.cardSizeDp,
                 isHost = savedData.isHost
             )
             _lobbyState.value = LobbyState.CONNECTED

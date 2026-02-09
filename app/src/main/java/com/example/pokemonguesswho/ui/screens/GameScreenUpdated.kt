@@ -6,11 +6,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,7 +54,8 @@ import com.example.pokemonguesswho.data.LobbyState
 import com.example.pokemonguesswho.data.PokemonViewModel
 import com.example.pokemonguesswho.game.GameManager
 import com.example.pokemonguesswho.ui.components.PokemonCardComponent
-import com.example.pokemonguesswho.ui.components.pinchToZoom
+import com.example.pokemonguesswho.ui.components.TypeIcon
+import com.example.pokemonguesswho.ui.components.getTypeColor
 
 @Composable
 fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
@@ -94,16 +100,12 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
                 )
             }
 
-            // Main game board with pinch-to-zoom
+            // Main game board
             PokemonGridUpdated(
                 pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
                 myPokemon = gameState.myPokemon,
                 onCardClick = { pokemon ->
                     viewModel.togglePokemonElimination(pokemon)
-                },
-                cardSizeDp = gameState.cardSizeDp,
-                onCardSizeChange = { newSize ->
-                    viewModel.setCardSize(newSize)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,6 +188,7 @@ fun OpponentFoundBanner(message: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MyPokemonTopBar(
     pokemon: GamePokemon,
@@ -201,100 +204,150 @@ fun MyPokemonTopBar(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Compact Pokemon card
-            Box(
-                modifier = Modifier.width(70.dp)
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PokemonCardComponent(
-                    pokemon = pokemon,
-                    onCardClick = { },
-                    isSelected = true,
-                    compact = true
-                )
-            }
-
-            // Name + stats
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = pokemon.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.DarkGray
-                )
-                // Stats in compact rows
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Pokemon card — 50% taller
+                Box(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .height(160.dp)
                 ) {
-                    StatChip("HP", pokemon.hp)
-                    StatChip("ATK", pokemon.attack)
-                    StatChip("DEF", pokemon.defense)
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    StatChip("SpA", pokemon.spAtk)
-                    StatChip("SpD", pokemon.spDef)
-                    StatChip("SPD", pokemon.speed)
-                }
-                // Types
-                Text(
-                    text = pokemon.types.joinToString(" / "),
-                    fontSize = 10.sp,
-                    color = Color.Gray
-                )
-            }
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Hide/Show eliminated toggle button
-                FilledIconButton(
-                    onClick = onToggleEliminated,
-                    modifier = Modifier.size(34.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = if (showEliminated)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else
-                            MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
-                        modifier = Modifier.size(16.dp)
+                    PokemonCardComponent(
+                        pokemon = pokemon,
+                        onCardClick = { },
+                        isSelected = true,
+                        compact = true
                     )
                 }
 
-                // End Game button
-                FilledIconButton(
-                    onClick = onEndGame,
-                    modifier = Modifier.size(34.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color(0xFFE53935)
-                    )
+                // Name + stats + action buttons
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "End Game",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = pokemon.name,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.DarkGray
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // Hide/Show eliminated toggle button
+                            FilledIconButton(
+                                onClick = onToggleEliminated,
+                                modifier = Modifier.size(30.dp),
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = if (showEliminated)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            // End Game button
+                            FilledIconButton(
+                                onClick = onEndGame,
+                                modifier = Modifier.size(30.dp),
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = Color(0xFFE53935)
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "End Game",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                    // Stats
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        StatChip("HP", pokemon.hp)
+                        StatChip("ATK", pokemon.attack)
+                        StatChip("DEF", pokemon.defense)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        StatChip("SpA", pokemon.spAtk)
+                        StatChip("SpD", pokemon.spDef)
+                        StatChip("SPD", pokemon.speed)
+                    }
+                    // Types
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        pokemon.types.forEach { type ->
+                            TypeIcon(type = type, size = 16.dp)
+                        }
+                        Text(
+                            text = pokemon.types.joinToString(" / "),
+                            fontSize = 10.sp,
+                            color = Color.Gray
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // Type glossary — horizontally scrollable
+                    Text(
+                        text = "TYPE GLOSSARY",
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 1.sp
                     )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        allPokemonTypes.forEach { type ->
+                            TypeGlossaryChip(type = type)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+private val allPokemonTypes = listOf(
+    "Normal", "Fire", "Water", "Electric", "Grass", "Ice",
+    "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
+    "Rock", "Ghost", "Dragon", "Fairy"
+)
+
+@Composable
+private fun TypeGlossaryChip(type: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        TypeIcon(type = type, size = 12.dp)
+        Text(
+            text = type.take(3).uppercase(),
+            fontSize = 7.sp,
+            fontWeight = FontWeight.Bold,
+            color = getTypeColor(type)
+        )
     }
 }
 
@@ -303,37 +356,25 @@ fun PokemonGridUpdated(
     pokemon: List<GamePokemon>,
     myPokemon: GamePokemon?,
     onCardClick: (GamePokemon) -> Unit,
-    cardSizeDp: Float,
-    onCardSizeChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .pinchToZoom(
-                currentSize = cardSizeDp,
-                minSize = 80f,
-                maxSize = 200f,
-                onSizeChange = onCardSizeChange
-            )
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 120.dp),
+        modifier = modifier,
+        contentPadding = PaddingValues(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = cardSizeDp.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items(
-                count = pokemon.size,
-                key = { pokemon[it].pokemonId }
-            ) { index ->
-                val poke = pokemon[index]
-                PokemonCardComponent(
-                    pokemon = poke,
-                    onCardClick = { onCardClick(it) },
-                    isSelected = myPokemon?.pokemonId == poke.pokemonId
-                )
-            }
+        items(
+            count = pokemon.size,
+            key = { pokemon[it].pokemonId }
+        ) { index ->
+            val poke = pokemon[index]
+            PokemonCardComponent(
+                pokemon = poke,
+                onCardClick = { onCardClick(it) },
+                isSelected = myPokemon?.pokemonId == poke.pokemonId
+            )
         }
     }
 }

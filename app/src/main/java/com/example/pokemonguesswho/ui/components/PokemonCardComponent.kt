@@ -138,9 +138,9 @@ fun PokemonCardComponent(
                 pokemon.types.forEach { type ->
                     TypeIcon(
                         type = type,
-                        size = if (compact) 14.dp else 18.dp
+                        size = if (compact) 16.dp else 24.dp
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
             }
 

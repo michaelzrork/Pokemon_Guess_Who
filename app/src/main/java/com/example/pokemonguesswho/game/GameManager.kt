@@ -8,7 +8,6 @@ data class GameState(
     val selectedPokemon: GamePokemon? = null,
     val myPokemon: GamePokemon? = null,
     val showEliminated: Boolean = true,
-    val cardSizeDp: Float = 120f,
     val gameId: String = "",
     val playerId: String = "",
     val opponentId: String? = null,
