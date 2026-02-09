@@ -107,7 +107,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 // Load Pokemon data from bundled JSON asset (instant, no network)
                 val pokemonDataList = withContext(Dispatchers.IO) {
                     val jsonString = getApplication<Application>().assets
-                        .open("pokemon_gen1.json")
+                        .open("pokemon_all.json")
                         .bufferedReader()
                         .use { it.readText() }
                     val listType = object : TypeToken<List<GamePokemon>>() {}.type

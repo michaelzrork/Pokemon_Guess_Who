@@ -89,6 +89,7 @@ data class GamePokemon(
     val spAtk: Int = 0,
     val spDef: Int = 0,
     val speed: Int = 0,
+    val evolutionStage: String = "Basic",
     var isEliminated: Boolean = false
 )
 

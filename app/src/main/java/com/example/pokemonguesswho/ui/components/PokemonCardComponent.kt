@@ -127,7 +127,7 @@ fun PokemonCardComponent(
                 }
             }
 
-            // -- TYPE ICONS ROW --
+            // -- TYPE ICONS + EVOLUTION STAGE ROW --
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -142,6 +142,19 @@ fun PokemonCardComponent(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                 }
+                // Evolution stage badge
+                Text(
+                    text = pokemon.evolutionStage,
+                    fontSize = if (compact) 7.sp else 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = getEvolutionStageColor(pokemon.evolutionStage),
+                    modifier = Modifier
+                        .background(
+                            getEvolutionStageColor(pokemon.evolutionStage).copy(alpha = 0.12f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                )
             }
 
             // -- STATS BAR (hidden in compact mode) --
@@ -164,18 +177,23 @@ fun PokemonCardComponent(
 
 @Composable
 private fun CompactStat(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy((-2).dp)
+    ) {
         Text(
             text = label,
             fontSize = 7.sp,
             color = Color.Gray,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            lineHeight = 8.sp
         )
         Text(
             text = value.toString(),
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.DarkGray
+            color = Color.DarkGray,
+            lineHeight = 10.sp
         )
     }
 }
@@ -411,5 +429,15 @@ fun getTypeColor(type: String): Color {
         "steel" -> Color(0xFFB8B8D0)
         "fairy" -> Color(0xFFEE99AC)
         else -> Color(0xFF68A090)
+    }
+}
+
+fun getEvolutionStageColor(stage: String): Color {
+    return when (stage) {
+        "Basic" -> Color(0xFF78C850)      // Green
+        "Stage 1" -> Color(0xFF6890F0)    // Blue
+        "Stage 2" -> Color(0xFFF08030)    // Orange
+        "Legendary" -> Color(0xFFFFD700)  // Gold
+        else -> Color(0xFFA8A878)         // Gray
     }
 }

@@ -311,9 +311,9 @@ private fun TypeGlossaryChip(type: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        TypeIcon(type = type, size = 12.dp)
+        TypeIcon(type = type, size = 18.dp)
         Text(
             text = type,
             fontSize = 8.sp,
