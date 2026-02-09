@@ -94,6 +94,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     private val _opponentFoundMessage = MutableStateFlow<String?>(null)
     val opponentFoundMessage: StateFlow<String?> = _opponentFoundMessage.asStateFlow()
 
+    // Gen 1 Pokemon (IDs 1-151) used for shuffle animation visuals
+    private var gen1Pokemon: List<GamePokemon> = emptyList()
+    private val imageLoader = ImageLoader(application)
+
     init {
         loadPokemon()
     }
@@ -104,7 +108,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 _isLoading.value = true
                 _loadingProgress.value = 0f
 
-                // Load Pokemon data from bundled JSON asset (instant, no network)
+                // Load all Pokemon data from bundled JSON asset (instant, no network)
                 val pokemonDataList = withContext(Dispatchers.IO) {
                     val jsonString = getApplication<Application>().assets
                         .open("pokemon_all.json")
@@ -115,27 +119,15 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 _pokemonList.value = pokemonDataList
+                gen1Pokemon = pokemonDataList.filter { it.pokemonId <= 151 }
 
-                // Preload all images with Coil (cached on disk after first download)
-                val imageLoader = ImageLoader(getApplication())
-                val total = pokemonDataList.size
+                // Preload only Gen 1 images (151) for the shuffle animation
+                val total = gen1Pokemon.size
                 val completed = AtomicInteger(0)
 
-                val preloadJobs = pokemonDataList.map { pokemon ->
+                val preloadJobs = gen1Pokemon.map { pokemon ->
                     async(Dispatchers.IO) {
-                        try {
-                            suspendCancellableCoroutine { cont ->
-                                val request = ImageRequest.Builder(getApplication())
-                                    .data(pokemon.imageUrl)
-                                    .size(512, 512)
-                                    .listener(
-                                        onSuccess = { _, _ -> cont.resume(Unit) },
-                                        onError = { _, _ -> cont.resume(Unit) }
-                                    )
-                                    .build()
-                                imageLoader.enqueue(request)
-                            }
-                        } catch (_: Exception) { }
+                        preloadImage(pokemon.imageUrl)
                         val done = completed.incrementAndGet()
                         _loadingProgress.value = done.toFloat() / total.toFloat()
                     }
@@ -148,6 +140,32 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 _isLoading.value = false
             }
         }
+    }
+
+    /** Preload a single image into Coil's disk cache. */
+    private suspend fun preloadImage(url: String) {
+        try {
+            suspendCancellableCoroutine { cont ->
+                val request = ImageRequest.Builder(getApplication())
+                    .data(url)
+                    .size(512, 512)
+                    .listener(
+                        onSuccess = { _, _ -> cont.resume(Unit) },
+                        onError = { _, _ -> cont.resume(Unit) }
+                    )
+                    .build()
+                imageLoader.enqueue(request)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Preload images for a list of board Pokemon, returning when all are cached. */
+    private suspend fun preloadBoardImages(board: List<GamePokemon>) {
+        board.map { pokemon ->
+            viewModelScope.async(Dispatchers.IO) {
+                preloadImage(pokemon.imageUrl)
+            }
+        }.awaitAll()
     }
 
     // ---- HOST FLOW ----
@@ -163,20 +181,25 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value
+            val shuffleSource = gen1Pokemon.ifEmpty { allPokemon }
 
             // Generate board while animation plays
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
 
-            // Loading animation — cycle through random Pokemon at a readable pace
-            // (GameScreenUpdated shows this while isShuffling is true)
+            // Preload the 25 board images in parallel with the shuffle animation
+            val preloadJob = async { preloadBoardImages(board) }
+
+            // Shuffle animation uses Gen 1 Pokemon (already cached)
             repeat(15) {
-                _shuffleDisplayPokemon.value = allPokemon.random()
+                _shuffleDisplayPokemon.value = shuffleSource.random()
                 delay(250)
             }
 
+            // Wait for board images to finish loading (usually done by now)
+            preloadJob.await()
+
             // Animation done — set the board and stop shuffling.
-            // GameScreenUpdated will transition from loading animation to game board.
             _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
@@ -279,6 +302,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             val boardData = gson.fromJson(json, BoardData::class.java)
             val allPokemon = _pokemonList.value
             val pokemonMap = allPokemon.associateBy { it.pokemonId }
+            val shuffleSource = gen1Pokemon.ifEmpty { allPokemon }
 
             val board = boardData.pokemonIds.mapNotNull { id ->
                 pokemonMap[id]?.copy(isEliminated = false)
@@ -297,11 +321,17 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 }
                 val myPokemon = available.random()
 
-                // Loading animation at readable pace
+                // Preload board images in parallel with shuffle animation
+                val preloadJob = async { preloadBoardImages(board) }
+
+                // Shuffle animation uses Gen 1 Pokemon (already cached)
                 repeat(12) {
-                    _shuffleDisplayPokemon.value = allPokemon.random()
+                    _shuffleDisplayPokemon.value = shuffleSource.random()
                     delay(250)
                 }
+
+                // Wait for board images to finish loading
+                preloadJob.await()
 
                 // Set board FIRST, then clear shuffling
                 _gameState.value = GameState(
@@ -378,6 +408,9 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             val myPokemon = pokemonMap[savedData.myPokemonId]
 
             if (board.size < 2 || myPokemon == null) return false
+
+            // Preload board images in background (may include non-Gen1 Pokemon)
+            viewModelScope.launch { preloadBoardImages(board) }
 
             _gameState.value = GameState(
                 board = board,
