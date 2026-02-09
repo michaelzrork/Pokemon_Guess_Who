@@ -1,17 +1,11 @@
 package com.example.pokemonguesswho.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,22 +16,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,218 +40,218 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.pokemonguesswho.data.GamePokemon
+import com.example.pokemonguesswho.data.LobbyState
 import com.example.pokemonguesswho.data.PokemonViewModel
 import com.example.pokemonguesswho.game.GameManager
 import com.example.pokemonguesswho.ui.components.PokemonCardComponent
+import com.example.pokemonguesswho.ui.components.pinchToZoom
 
 @Composable
 fun GameScreenUpdated(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
+    val lobbyState by viewModel.lobbyState.collectAsState()
+    val opponentFoundMessage by viewModel.opponentFoundMessage.collectAsState()
     val gameManager = GameManager()
-    val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFFAFAFA))
-    ) {
-        // Header with game controls
-        GameHeaderUpdated(
-            onToggleEliminated = { viewModel.toggleShowEliminated() },
-            showEliminated = gameState.showEliminated,
-            onShareBoard = {
-                val json = viewModel.exportBoardAsJson()
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Pokemon Board", json))
-                Toast.makeText(context, "Game code copied to clipboard!", Toast.LENGTH_SHORT).show()
-            },
-            gridColumns = gameState.gridColumns,
-            onZoomIn = {
-                val newCol = (gameState.gridColumns - 1).coerceIn(1, 6)
-                viewModel.setGridColumns(newCol)
-            },
-            onZoomOut = {
-                val newCol = (gameState.gridColumns + 1).coerceIn(1, 6)
-                viewModel.setGridColumns(newCol)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
+        ) {
+            // Waiting for player status bar (host only, before opponent connects)
+            if (gameState.isHost && lobbyState == LobbyState.WAITING_FOR_OPPONENT) {
+                WaitingForPlayerBar()
             }
-        )
 
-        // Your assigned Pokemon banner
-        gameState.myPokemon?.let { myPoke ->
-            MyPokemonBanner(pokemon = myPoke)
+            // Top bar: My Pokemon card (compact) + Hide/Show toggle
+            gameState.myPokemon?.let { myPoke ->
+                MyPokemonTopBar(
+                    pokemon = myPoke,
+                    showEliminated = gameState.showEliminated,
+                    onToggleEliminated = { viewModel.toggleShowEliminated() }
+                )
+            }
+
+            // Main game board with pinch-to-zoom
+            PokemonGridUpdated(
+                pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
+                myPokemon = gameState.myPokemon,
+                onCardClick = { pokemon ->
+                    viewModel.togglePokemonElimination(pokemon)
+                },
+                cardSizeDp = gameState.cardSizeDp,
+                onCardSizeChange = { newSize ->
+                    viewModel.setCardSize(newSize)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
         }
 
-        // Main game board
-        PokemonGridUpdated(
-            pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
-            myPokemon = gameState.myPokemon,
-            onCardClick = { pokemon ->
-                viewModel.togglePokemonElimination(pokemon)
-            },
-            gridColumns = gameState.gridColumns,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(8.dp)
+        // "Player Found!" notification overlay
+        AnimatedVisibility(
+            visible = opponentFoundMessage != null,
+            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            OpponentFoundBanner(message = opponentFoundMessage ?: "")
+        }
+    }
+}
+
+@Composable
+fun WaitingForPlayerBar() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF6200EE))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        CircularProgressIndicator(
+            color = Color(0xFFFFEB3B),
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp
+        )
+        Icon(
+            imageVector = Icons.Default.Bluetooth,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = "Waiting for opponent to join...",
+            fontSize = 13.sp,
+            color = Color.White,
+            fontWeight = FontWeight.Medium
         )
     }
 }
 
 @Composable
-fun GameHeaderUpdated(
-    onToggleEliminated: () -> Unit,
+fun OpponentFoundBanner(message: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = message,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+fun MyPokemonTopBar(
+    pokemon: GamePokemon,
     showEliminated: Boolean,
-    onShareBoard: () -> Unit,
-    gridColumns: Int,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit
+    onToggleEliminated: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Title
-            Text(
-                text = "Pokemon Guess Who",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-
-            // Control buttons row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Toggle eliminated cards
-                Button(
-                    onClick = onToggleEliminated,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = "Toggle",
-                        modifier = Modifier.padding(end = 4.dp),
-                        tint = Color.White
-                    )
-                    Text(if (showEliminated) "Hide X" else "Show X", fontSize = 11.sp)
-                }
-
-                // Zoom controls
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilledIconButton(
-                        onClick = onZoomOut,
-                        enabled = gridColumns < 6,
-                        modifier = Modifier.size(36.dp),
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "Zoom Out",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Text(
-                        text = "${gridColumns}col",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    FilledIconButton(
-                        onClick = onZoomIn,
-                        enabled = gridColumns > 1,
-                        modifier = Modifier.size(36.dp),
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Zoom In",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                // Share board button
-                Button(
-                    onClick = onShareBoard,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share Board",
-                        modifier = Modifier.padding(end = 4.dp),
-                        tint = Color.White
-                    )
-                    Text("Share", fontSize = 11.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MyPokemonBanner(pokemon: GamePokemon) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEB3B))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
     ) {
-        androidx.compose.foundation.layout.Row(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AsyncImage(
-                model = pokemon.imageUrl,
-                contentDescription = pokemon.name,
-                modifier = Modifier
-                    .height(60.dp)
-                    .padding(end = 12.dp),
-                contentScale = ContentScale.Fit
-            )
-            Column {
-                Text(
-                    text = "Your Pokemon",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Gray
+            // Compact Pokemon card
+            Box(
+                modifier = Modifier.width(70.dp)
+            ) {
+                PokemonCardComponent(
+                    pokemon = pokemon,
+                    onCardClick = { },
+                    isSelected = true,
+                    compact = true
                 )
+            }
+
+            // Name + stats
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = pokemon.name,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray
+                )
+                // Stats in compact rows
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatChip("HP", pokemon.hp)
+                    StatChip("ATK", pokemon.attack)
+                    StatChip("DEF", pokemon.defense)
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatChip("SpA", pokemon.spAtk)
+                    StatChip("SpD", pokemon.spDef)
+                    StatChip("SPD", pokemon.speed)
+                }
+                // Types
+                Text(
+                    text = pokemon.types.joinToString(" / "),
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            }
+
+            // Hide/Show eliminated toggle button
+            FilledIconButton(
+                onClick = onToggleEliminated,
+                modifier = Modifier.size(38.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (showEliminated)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Icon(
+                    imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -270,21 +263,23 @@ fun PokemonGridUpdated(
     pokemon: List<GamePokemon>,
     myPokemon: GamePokemon?,
     onCardClick: (GamePokemon) -> Unit,
-    gridColumns: Int,
+    cardSizeDp: Float,
+    onCardSizeChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    AnimatedContent(
-        targetState = gridColumns,
-        transitionSpec = {
-            (fadeIn() + scaleIn(initialScale = 0.95f)) togetherWith (fadeOut() + scaleOut(targetScale = 0.95f))
-        },
-        modifier = modifier,
-        label = "GridLayoutTransition"
-    ) { columns ->
+    Box(
+        modifier = modifier
+            .pinchToZoom(
+                currentSize = cardSizeDp,
+                minSize = 80f,
+                maxSize = 200f,
+                onSizeChange = onCardSizeChange
+            )
+    ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
+            columns = GridCells.Adaptive(minSize = cardSizeDp.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(4.dp),
+            contentPadding = PaddingValues(8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -293,19 +288,33 @@ fun PokemonGridUpdated(
                 key = { pokemon[it].pokemonId }
             ) { index ->
                 val poke = pokemon[index]
-                Box(
-                    modifier = Modifier
-                        .clickable {
-                            onCardClick(poke)
-                        }
-                ) {
-                    PokemonCardComponent(
-                        pokemon = poke,
-                        onCardClick = { onCardClick(it) },
-                        isSelected = myPokemon?.pokemonId == poke.pokemonId
-                    )
-                }
+                PokemonCardComponent(
+                    pokemon = poke,
+                    onCardClick = { onCardClick(it) },
+                    isSelected = myPokemon?.pokemonId == poke.pokemonId
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun StatChip(label: String, value: Int) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Gray
+        )
+        Text(
+            text = value.toString(),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.DarkGray
+        )
     }
 }

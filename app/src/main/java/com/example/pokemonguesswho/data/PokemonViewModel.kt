@@ -1,10 +1,13 @@
 package com.example.pokemonguesswho.data
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokemonguesswho.game.GameManager
 import com.example.pokemonguesswho.game.GameState
 import com.example.pokemonguesswho.network.PokemonApiClient
+import com.example.pokemonguesswho.network.bluetooth.BluetoothConnectionManager
+import com.example.pokemonguesswho.network.bluetooth.BluetoothDeviceInfo
 import com.google.gson.Gson
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,10 +19,21 @@ data class BoardData(
     val pokemonIds: List<Int>
 )
 
-class PokemonViewModel : ViewModel() {
+enum class LobbyState {
+    IDLE,
+    WAITING_FOR_OPPONENT,
+    SCANNING,
+    DEVICE_LIST,
+    CONNECTING,
+    CONNECTED,
+    ERROR
+}
+
+class PokemonViewModel(application: Application) : AndroidViewModel(application) {
 
     private val gameManager = GameManager()
     private val gson = Gson()
+    val bluetoothManager = BluetoothConnectionManager(application.applicationContext)
 
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -42,6 +56,23 @@ class PokemonViewModel : ViewModel() {
 
     private val _shuffleDisplayPokemon = MutableStateFlow<GamePokemon?>(null)
     val shuffleDisplayPokemon: StateFlow<GamePokemon?> = _shuffleDisplayPokemon.asStateFlow()
+
+    // Lobby state
+    private val _lobbyState = MutableStateFlow(LobbyState.IDLE)
+    val lobbyState: StateFlow<LobbyState> = _lobbyState.asStateFlow()
+
+    // Expose Bluetooth discovered devices (only confirmed hosted games)
+    val discoveredDevices: StateFlow<List<BluetoothDeviceInfo>> = bluetoothManager.discoveredDevices
+
+    // Whether we're still scanning/probing for games
+    val isScanning: StateFlow<Boolean> = bluetoothManager.isScanning
+
+    // Expose connected device name
+    val connectedDeviceName: StateFlow<String?> = bluetoothManager.connectedDeviceName
+
+    // "Player Found!" notification for host game screen overlay
+    private val _opponentFoundMessage = MutableStateFlow<String?>(null)
+    val opponentFoundMessage: StateFlow<String?> = _opponentFoundMessage.asStateFlow()
 
     init {
         loadPokemon()
@@ -101,12 +132,18 @@ class PokemonViewModel : ViewModel() {
         }
     }
 
+    // ---- HOST FLOW ----
+
+    /**
+     * Start a new game as the host.
+     * Generates the board, runs shuffle animation, then starts BT server.
+     */
     fun startNewGame() {
         viewModelScope.launch {
             _isShuffling.value = true
 
-            // Run the shuffling animation - rapidly cycle through random pokemon
             val allPokemon = _pokemonList.value
+            // Shuffling animation
             repeat(20) {
                 _shuffleDisplayPokemon.value = allPokemon.random()
                 delay(100)
@@ -116,7 +153,7 @@ class PokemonViewModel : ViewModel() {
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
 
-            // Show the final picks slowing down
+            // Slow down reveal
             repeat(8) {
                 _shuffleDisplayPokemon.value = board.random()
                 delay(150 + (it * 50L))
@@ -133,25 +170,90 @@ class PokemonViewModel : ViewModel() {
                 board = board,
                 myPokemon = myPokemon,
                 showEliminated = true,
-                gridColumns = 3
+                cardSizeDp = 120f,
+                isHost = true
             )
+
+            // Start Bluetooth server and wait for opponent
+            _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
+            startBluetoothServer()
+        }
+    }
+
+    private fun startBluetoothServer() {
+        bluetoothManager.startServerAsync(
+            scope = viewModelScope,
+            onConnected = {
+                // Send board data to the client
+                viewModelScope.launch {
+                    val boardJson = exportBoardAsJson()
+                    bluetoothManager.sendMessage(boardJson)
+                    _lobbyState.value = LobbyState.CONNECTED
+
+                    // Show "Player Found!" notification on game screen
+                    val name = bluetoothManager.connectedDeviceName.value ?: "Opponent"
+                    _opponentFoundMessage.value = "Player Found! $name joined!"
+                    delay(3000)
+                    _opponentFoundMessage.value = null
+                }
+            },
+            onError = {
+                _lobbyState.value = LobbyState.ERROR
+            }
+        )
+    }
+
+    // ---- CLIENT FLOW ----
+
+    /**
+     * Start scanning for available host devices.
+     */
+    fun startJoinGame() {
+        _lobbyState.value = LobbyState.SCANNING
+        bluetoothManager.startDiscovery()
+
+        // After a short delay, move to device list state
+        viewModelScope.launch {
+            delay(500)
+            _lobbyState.value = LobbyState.DEVICE_LIST
         }
     }
 
     /**
-     * Export the current board as a JSON string that can be shared via text.
-     * Contains just the pokemon IDs so the other player can load the same board.
+     * Connect to a specific host device and receive the board.
      */
-    fun exportBoardAsJson(): String {
+    fun connectToHost(device: BluetoothDeviceInfo) {
+        viewModelScope.launch {
+            _lobbyState.value = LobbyState.CONNECTING
+
+            val connected = bluetoothManager.connectToDevice(device.address)
+            if (connected) {
+                // Read the board data from the host
+                val boardJson = bluetoothManager.readMessage()
+                if (boardJson != null) {
+                    val success = joinGameFromJson(boardJson)
+                    if (success) {
+                        _lobbyState.value = LobbyState.CONNECTED
+                    } else {
+                        _lobbyState.value = LobbyState.ERROR
+                    }
+                } else {
+                    _lobbyState.value = LobbyState.ERROR
+                }
+            } else {
+                _lobbyState.value = LobbyState.ERROR
+            }
+        }
+    }
+
+    // ---- SHARED ----
+
+    private fun exportBoardAsJson(): String {
         val board = _gameState.value.board
         val boardData = BoardData(pokemonIds = board.map { it.pokemonId })
         return gson.toJson(boardData)
     }
 
-    /**
-     * Import a board from a JSON string shared by the host.
-     * Looks up each pokemon ID in the cached list to rebuild the full board.
-     */
     fun joinGameFromJson(json: String): Boolean {
         return try {
             val boardData = gson.fromJson(json, BoardData::class.java)
@@ -167,7 +269,6 @@ class PokemonViewModel : ViewModel() {
             viewModelScope.launch {
                 _isShuffling.value = true
 
-                // Shuffling animation for joining player too
                 repeat(15) {
                     _shuffleDisplayPokemon.value = allPokemon.random()
                     delay(100)
@@ -190,7 +291,8 @@ class PokemonViewModel : ViewModel() {
                     board = board,
                     myPokemon = myPokemon,
                     showEliminated = true,
-                    gridColumns = 3
+                    cardSizeDp = 120f,
+                    isHost = false
                 )
             }
             true
@@ -207,13 +309,23 @@ class PokemonViewModel : ViewModel() {
         _gameState.value = _gameState.value.copy(board = newBoard)
     }
 
-    fun setGridColumns(columns: Int) {
-        _gameState.value = _gameState.value.copy(gridColumns = columns)
+    fun setCardSize(size: Float) {
+        _gameState.value = _gameState.value.copy(cardSizeDp = size)
     }
 
     fun toggleShowEliminated() {
         _gameState.value = _gameState.value.copy(
             showEliminated = !_gameState.value.showEliminated
         )
+    }
+
+    fun resetLobby() {
+        bluetoothManager.disconnect()
+        _lobbyState.value = LobbyState.IDLE
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        bluetoothManager.cleanup()
     }
 }

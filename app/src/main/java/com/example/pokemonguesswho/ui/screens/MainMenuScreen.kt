@@ -23,16 +23,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,9 +50,6 @@ fun MainMenuScreen(
     val isShuffling by viewModel.isShuffling.collectAsState()
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    var showJoinDialog by remember { mutableStateOf(false) }
-    var joinCodeText by remember { mutableStateOf("") }
-    var joinError by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -135,126 +126,46 @@ fun MainMenuScreen(
                 }
 
                 else -> {
-                    // Buttons
                     Box(modifier = Modifier.size(16.dp))
 
-                    if (!showJoinDialog) {
-                        // Start a Game Button
-                        Button(
-                            onClick = {
-                                viewModel.startNewGame()
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF3700B3)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                "Start a Game",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(12.dp),
-                                color = Color.White
-                            )
-                        }
-
-                        // Join a Game Button
-                        Button(
-                            onClick = { showJoinDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF03DAC5)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                "Join a Game",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(12.dp),
-                                color = Color.Black
-                            )
-                        }
-                    } else {
-                        // Join game - paste code UI
+                    // Start a Game Button
+                    Button(
+                        onClick = onStartGame,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3700B3)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
                         Text(
-                            text = "Paste the game code from the host:",
-                            fontSize = 16.sp,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            "Start a Game",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(12.dp),
+                            color = Color.White
                         )
+                    }
 
-                        OutlinedTextField(
-                            value = joinCodeText,
-                            onValueChange = {
-                                joinCodeText = it
-                                joinError = null
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp),
-                            placeholder = { Text("Paste game code here...", color = Color.White.copy(alpha = 0.5f)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = Color(0xFFFFEB3B),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                                cursorColor = Color(0xFFFFEB3B)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
+                    // Join a Game Button
+                    Button(
+                        onClick = onJoinGame,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF03DAC5)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "Join a Game",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(12.dp),
+                            color = Color.Black
                         )
-
-                        if (joinError != null) {
-                            Text(
-                                text = joinError!!,
-                                fontSize = 14.sp,
-                                color = Color.Red,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = {
-                                val success = viewModel.joinGameFromJson(joinCodeText.trim())
-                                if (success) {
-                                    // Navigation will happen after shuffle animation
-                                } else {
-                                    joinError = "Invalid game code. Please try again."
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF03DAC5)
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            enabled = joinCodeText.isNotBlank()
-                        ) {
-                            Text(
-                                "Join",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(12.dp),
-                                color = Color.Black
-                            )
-                        }
-
-                        TextButton(
-                            onClick = {
-                                showJoinDialog = false
-                                joinCodeText = ""
-                                joinError = null
-                            }
-                        ) {
-                            Text("Back", color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
-                        }
                     }
                 }
             }
