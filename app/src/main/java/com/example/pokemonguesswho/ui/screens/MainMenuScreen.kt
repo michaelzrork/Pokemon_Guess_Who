@@ -59,6 +59,7 @@ fun MainMenuScreen(
     val isShuffling by viewModel.isShuffling.collectAsState()
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val navigateToGame by viewModel.navigateToGame.collectAsState()
     val hasSavedGame = viewModel.hasSavedGame()
 
     Box(
@@ -106,8 +107,8 @@ fun MainMenuScreen(
                     )
                 }
 
-                isShuffling -> {
-                    // Shuffling animation
+                isShuffling || navigateToGame -> {
+                    // Shuffling animation (also shown while navigation is in flight)
                     ShufflingAnimation(pokemon = shuffleDisplayPokemon)
                 }
 
