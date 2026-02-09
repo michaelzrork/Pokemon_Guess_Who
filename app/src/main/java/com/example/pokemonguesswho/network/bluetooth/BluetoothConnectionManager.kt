@@ -62,6 +62,8 @@ class BluetoothConnectionManager(private val context: Context) {
         // Characteristic for board data transfer (client writes request, host sends notification)
         private val BOARD_CHAR_UUID = UUID.fromString("0000ABCE-0000-1000-8000-00805F9B34FB")
         private const val BLE_SCAN_DURATION_MS = 15000L
+        private const val GATT_ERROR_133 = 133
+        private const val MAX_GATT_RETRIES = 5
     }
 
     private val bluetoothManager: BluetoothManager? =
@@ -457,17 +459,47 @@ class BluetoothConnectionManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private suspend fun connectGattAndRead(device: BluetoothDevice): String? {
-        return withTimeoutOrNull(15000L) {
+        // Retry loop for the infamous status 133 GATT_ERROR
+        for (attempt in 1..MAX_GATT_RETRIES) {
+            Log.d(TAG, "GATT connection attempt $attempt/$MAX_GATT_RETRIES")
+
+            // Small delay before connecting — helps Android BLE stack stabilize
+            if (attempt > 1) {
+                val backoff = 500L * attempt
+                Log.d(TAG, "Waiting ${backoff}ms before retry...")
+                delay(backoff)
+            } else {
+                delay(200) // Small delay even on first attempt
+            }
+
+            val result = attemptGattConnect(device)
+
+            if (result != null) {
+                return result // Success!
+            }
+
+            // If we got here with null, it was a 133 or similar transient error
+            Log.w(TAG, "GATT attempt $attempt failed, ${if (attempt < MAX_GATT_RETRIES) "retrying..." else "giving up."}")
+        }
+
+        return null
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun attemptGattConnect(device: BluetoothDevice): String? {
+        return withTimeoutOrNull(10000L) {
             suspendCancellableCoroutine { continuation ->
                 var resumed = false
 
                 val gatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
                     override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-                        if (newState == BluetoothProfile.STATE_CONNECTED) {
+                        if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                             Log.d(TAG, "GATT connected, discovering services...")
                             gatt?.discoverServices()
                         } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                             Log.d(TAG, "GATT disconnected (status=$status)")
+                            gatt?.close()
+                            gattClient = null
                             if (!resumed) {
                                 resumed = true
                                 continuation.resume(null)
@@ -491,6 +523,8 @@ class BluetoothConnectionManager(private val context: Context) {
                                 if (!resumed) {
                                     resumed = true
                                     gatt?.disconnect()
+                                    gatt?.close()
+                                    gattClient = null
                                     continuation.resume(null)
                                 }
                             }
@@ -499,6 +533,8 @@ class BluetoothConnectionManager(private val context: Context) {
                             if (!resumed) {
                                 resumed = true
                                 gatt?.disconnect()
+                                gatt?.close()
+                                gattClient = null
                                 continuation.resume(null)
                             }
                         }
@@ -518,6 +554,8 @@ class BluetoothConnectionManager(private val context: Context) {
                             if (!resumed) {
                                 resumed = true
                                 gatt?.disconnect()
+                                gatt?.close()
+                                gattClient = null
                                 continuation.resume(null)
                             }
                         }
@@ -546,6 +584,8 @@ class BluetoothConnectionManager(private val context: Context) {
                             if (!resumed) {
                                 resumed = true
                                 gatt?.disconnect()
+                                gatt?.close()
+                                gattClient = null
                                 continuation.resume(null)
                             }
                         }
