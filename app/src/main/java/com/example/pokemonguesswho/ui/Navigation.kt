@@ -20,10 +20,7 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun AppNavigation(
-    viewModel: PokemonViewModel,
-    onRequestDiscoverability: ((Boolean) -> Unit) -> Unit
-) {
+fun AppNavigation(viewModel: PokemonViewModel) {
     val navController = rememberNavController()
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
@@ -49,12 +46,9 @@ fun AppNavigation(
             MainMenuScreen(
                 viewModel = viewModel,
                 onStartGame = {
-                    // Request discoverability (one-time prompt per session), then start game
-                    onRequestDiscoverability { _ ->
-                        viewModel.startNewGame()
-                        navController.navigate(Screen.Game.route) {
-                            launchSingleTop = true
-                        }
+                    viewModel.startNewGame()
+                    navController.navigate(Screen.Game.route) {
+                        launchSingleTop = true
                     }
                 },
                 onJoinGame = {

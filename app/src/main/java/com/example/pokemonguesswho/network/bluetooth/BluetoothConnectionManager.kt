@@ -6,11 +6,17 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
-import android.content.BroadcastReceiver
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.BluetoothLeAdvertiser
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
+import android.os.ParcelUuid
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,9 +33,6 @@ import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 enum class BluetoothConnectionState {
     DISCONNECTED,
@@ -50,9 +53,12 @@ class BluetoothConnectionManager(private val context: Context) {
 
     companion object {
         private const val TAG = "BTConnectionManager"
+        // UUID for RFCOMM connection
         private val SERVICE_UUID = UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
         private const val SERVICE_NAME = "PokemonGuessWho"
-        private const val PROBE_TIMEOUT_MS = 8000L
+        // UUID for BLE advertising — uses a 16-bit short UUID embedded in the standard BLE base
+        private val BLE_SERVICE_UUID = ParcelUuid.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
+        private const val BLE_SCAN_DURATION_MS = 15000L
     }
 
     private val bluetoothManager: BluetoothManager? =
@@ -68,7 +74,6 @@ class BluetoothConnectionManager(private val context: Context) {
     private val _connectionState = MutableStateFlow(BluetoothConnectionState.DISCONNECTED)
     val connectionState: StateFlow<BluetoothConnectionState> = _connectionState.asStateFlow()
 
-    // These are ONLY devices confirmed to be hosting a Pokemon Guess Who game
     private val _discoveredGames = MutableStateFlow<List<BluetoothDeviceInfo>>(emptyList())
     val discoveredDevices: StateFlow<List<BluetoothDeviceInfo>> = _discoveredGames.asStateFlow()
 
@@ -81,55 +86,49 @@ class BluetoothConnectionManager(private val context: Context) {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // Coroutine scope for probe jobs — using thread-safe collections
-    private val probeScope = CoroutineScope(Dispatchers.IO)
-    private val probeJobs = CopyOnWriteArrayList<Job>()
-
-    // Track addresses we've already probed — thread-safe set
-    private val probedAddresses = ConcurrentHashMap.newKeySet<String>()
-
     // Server job so we can cancel it cleanly
     private var serverJob: Job? = null
 
-    // Flag to ignore premature ACTION_DISCOVERY_FINISHED from cancelDiscovery()
-    private val discoveryStarted = AtomicBoolean(false)
+    // BLE advertiser (host side)
+    private var bleAdvertiser: BluetoothLeAdvertiser? = null
+    private var isAdvertising = false
 
-    // BroadcastReceiver for BT discovery - finds devices, then we probe them
-    private val discoveryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                BluetoothDevice.ACTION_FOUND -> {
-                    val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    }
-                    device?.let {
-                        Log.d(TAG, "Discovery found device: ${it.name} (${it.address})")
-                        probeDevice(it)
-                    }
-                }
-                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                    // Ignore if this is a premature event from cancelDiscovery()
-                    if (!discoveryStarted.compareAndSet(true, false)) {
-                        Log.d(TAG, "Ignoring premature DISCOVERY_FINISHED")
-                        return
-                    }
-                    Log.d(TAG, "BT discovery scan finished, waiting for probes to complete...")
-                    probeScope.launch {
-                        // Take a snapshot of current jobs and wait for them
-                        val currentJobs = probeJobs.toList()
-                        currentJobs.forEach { it.join() }
-                        Log.d(TAG, "All probes completed. Found ${_discoveredGames.value.size} hosted games")
-                        _isScanning.value = false
-                    }
-                }
+    // BLE scanner (client side)
+    private var bleScanner: BluetoothLeScanner? = null
+    private var scanJob: Job? = null
+    private val discoveredAddresses = mutableSetOf<String>()
+
+    private val bleScanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val device = result.device ?: return
+            val address = device.address ?: return
+            val name = device.name ?: "Pokemon Host"
+
+            if (discoveredAddresses.add(address)) {
+                Log.d(TAG, "BLE scan found game host: $name ($address) RSSI=${result.rssi}")
+                addHostedGame(name, address)
             }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.e(TAG, "BLE scan failed with error code: $errorCode")
+            _isScanning.value = false
+            _errorMessage.value = "BLE scan failed (error $errorCode)"
         }
     }
 
-    private var isReceiverRegistered = false
+    private val bleAdvertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+            Log.d(TAG, "BLE advertising started successfully")
+            isAdvertising = true
+        }
+
+        override fun onStartFailure(errorCode: Int) {
+            Log.e(TAG, "BLE advertising failed to start: errorCode=$errorCode")
+            isAdvertising = false
+            // Fall through — RFCOMM server still works for paired devices
+        }
+    }
 
     fun isBluetoothAvailable(): Boolean = bluetoothAdapter != null
 
@@ -137,11 +136,6 @@ class BluetoothConnectionManager(private val context: Context) {
 
     // ---- SERVER SIDE (Host) ----
 
-    /**
-     * Start listening for incoming connections (host side).
-     * Uses listenUsingInsecureRfcommWithServiceRecord so that unpaired devices
-     * can also connect (no pairing prompt needed for the probe or the real join).
-     */
     fun startServerAsync(scope: CoroutineScope, onConnected: () -> Unit, onError: () -> Unit) {
         serverJob?.cancel()
         serverJob = scope.launch(Dispatchers.IO) {
@@ -158,28 +152,27 @@ class BluetoothConnectionManager(private val context: Context) {
                     return@launch
                 }
 
-                Log.d(TAG, "Server listening for connections (insecure RFCOMM)...")
+                Log.d(TAG, "RFCOMM server listening...")
 
-                // Accept connections in a loop. Probe connections will connect
-                // and immediately disconnect. The real client will send a handshake.
+                // Start BLE advertising so clients can find us
+                startBleAdvertising()
+
                 while (true) {
                     val socket: BluetoothSocket
                     try {
                         socket = serverSocket?.accept() ?: break
                     } catch (e: IOException) {
-                        // Server socket was closed (e.g. user cancelled)
                         if (_connectionState.value == BluetoothConnectionState.LISTENING) {
                             Log.d(TAG, "Server socket closed while listening")
                         }
                         break
                     }
 
-                    Log.d(TAG, "Accepted connection from: ${socket.remoteDevice?.name}")
+                    Log.d(TAG, "Accepted connection from: ${socket.remoteDevice?.name} (${socket.remoteDevice?.address})")
 
                     try {
                         val reader = BufferedReader(InputStreamReader(socket.inputStream))
 
-                        // Use a timeout to distinguish probes from real clients
                         val handshake = withTimeoutOrNull(3000L) {
                             try {
                                 reader.readLine()
@@ -189,7 +182,6 @@ class BluetoothConnectionManager(private val context: Context) {
                         }
 
                         if (handshake == "POKEMON_GUESS_WHO_JOIN") {
-                            // This is a real client!
                             connectedSocket = socket
                             inputReader = reader
                             outputStream = socket.outputStream
@@ -197,16 +189,15 @@ class BluetoothConnectionManager(private val context: Context) {
                             _connectionState.value = BluetoothConnectionState.CONNECTED
                             Log.d(TAG, "Real client connected: ${socket.remoteDevice?.name}")
 
-                            // Close server socket - we have our player
-                            try {
-                                serverSocket?.close()
-                            } catch (_: IOException) {}
+                            // Stop advertising and close server socket
+                            stopBleAdvertising()
+                            try { serverSocket?.close() } catch (_: IOException) {}
                             serverSocket = null
 
                             onConnected()
                             return@launch
                         } else {
-                            Log.d(TAG, "Probe/invalid connection from ${socket.remoteDevice?.name}, continuing to listen...")
+                            Log.d(TAG, "Probe/invalid connection from ${socket.remoteDevice?.name}, continuing...")
                             try { socket.close() } catch (_: IOException) {}
                         }
                     } catch (e: Exception) {
@@ -231,101 +222,127 @@ class BluetoothConnectionManager(private val context: Context) {
         }
     }
 
+    // ---- BLE ADVERTISING (Host broadcasts presence) ----
+
+    private fun startBleAdvertising() {
+        bleAdvertiser = bluetoothAdapter?.bluetoothLeAdvertiser
+        if (bleAdvertiser == null) {
+            Log.w(TAG, "BLE advertiser not available on this device")
+            return
+        }
+
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(false) // We don't use BLE GATT — just advertising for discovery
+            .setTimeout(0) // Advertise indefinitely
+            .build()
+
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .addServiceUuid(BLE_SERVICE_UUID)
+            .build()
+
+        try {
+            bleAdvertiser?.startAdvertising(settings, data, bleAdvertiseCallback)
+            Log.d(TAG, "Starting BLE advertising with UUID: $BLE_SERVICE_UUID")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start BLE advertising: ${e.message}")
+        }
+    }
+
+    private fun stopBleAdvertising() {
+        if (isAdvertising) {
+            try {
+                bleAdvertiser?.stopAdvertising(bleAdvertiseCallback)
+                Log.d(TAG, "BLE advertising stopped")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping BLE advertising: ${e.message}")
+            }
+            isAdvertising = false
+        }
+    }
+
     // ---- CLIENT SIDE (Joiner) ----
 
-    /**
-     * Scan for nearby devices and probe each one for our game service.
-     * Only devices running a hosted Pokemon Guess Who game will appear in discoveredDevices.
-     */
     fun startDiscovery() {
         _connectionState.value = BluetoothConnectionState.DISCOVERING
         _errorMessage.value = null
         _discoveredGames.value = emptyList()
         _isScanning.value = true
-        probedAddresses.clear()
+        discoveredAddresses.clear()
 
-        // Cancel any existing probe jobs
-        probeJobs.forEach { it.cancel() }
-        probeJobs.clear()
-
-        // Register receiver
-        if (!isReceiverRegistered) {
-            val filter = IntentFilter().apply {
-                addAction(BluetoothDevice.ACTION_FOUND)
-                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-            }
-            context.registerReceiver(discoveryReceiver, filter)
-            isReceiverRegistered = true
+        bleScanner = bluetoothAdapter?.bluetoothLeScanner
+        if (bleScanner == null) {
+            Log.e(TAG, "BLE scanner not available")
+            _errorMessage.value = "BLE scanner not available"
+            _isScanning.value = false
+            return
         }
 
-        // Cancel any existing discovery first, but don't set our flag yet
-        // (this prevents the premature DISCOVERY_FINISHED from being processed)
-        discoveryStarted.set(false)
-        if (bluetoothAdapter?.isDiscovering == true) {
-            bluetoothAdapter.cancelDiscovery()
+        // Scan filter: only find devices advertising our service UUID
+        val filter = ScanFilter.Builder()
+            .setServiceUuid(BLE_SERVICE_UUID)
+            .build()
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        try {
+            bleScanner?.startScan(listOf(filter), settings, bleScanCallback)
+            Log.d(TAG, "BLE scan started, looking for service UUID: $BLE_SERVICE_UUID")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start BLE scan: ${e.message}")
+            _isScanning.value = false
+            return
         }
 
-        // Also probe bonded (paired) devices — they can be found without discovery
+        // Also probe bonded devices via RFCOMM — they might be hosting without BLE
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             probeDevice(device)
         }
 
-        // Small delay to let any pending DISCOVERY_FINISHED from cancelDiscovery() fire
-        probeScope.launch {
-            delay(200)
-
-            // Now set the flag and start fresh discovery
-            discoveryStarted.set(true)
-            val started = bluetoothAdapter?.startDiscovery() ?: false
-            Log.d(TAG, "Started discovery: $started, probing bonded devices too")
-
-            if (!started) {
-                Log.e(TAG, "Failed to start Bluetooth discovery!")
-                _isScanning.value = false
+        // Auto-stop scan after timeout
+        scanJob = CoroutineScope(Dispatchers.IO).launch {
+            delay(BLE_SCAN_DURATION_MS)
+            if (_isScanning.value) {
+                Log.d(TAG, "BLE scan timeout reached, stopping scan")
+                withContext(Dispatchers.Main) {
+                    stopBleScan()
+                    _isScanning.value = false
+                }
             }
         }
     }
 
-    /**
-     * Probe a single device to check if it's running our game service.
-     * Attempts a quick RFCOMM connection with our UUID — if it connects,
-     * the device is hosting a game. We immediately close the probe socket.
-     */
     private fun probeDevice(device: BluetoothDevice) {
         val address = device.address ?: return
         val name = device.name ?: device.address ?: return
 
-        // Don't probe the same device twice (thread-safe check)
-        if (!probedAddresses.add(address)) return
+        if (!discoveredAddresses.add(address)) return
 
-        val job = probeScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d(TAG, "Probing $name ($address) for game service...")
-
-                val result = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
+                Log.d(TAG, "Probing bonded device $name ($address)...")
+                val result = withTimeoutOrNull(5000L) {
                     try {
-                        // Use insecure connection so no pairing prompt is needed for the probe
                         val probeSocket = device.createInsecureRfcommSocketToServiceRecord(SERVICE_UUID)
                         probeSocket.connect()
-                        // Success! This device is running our service.
                         probeSocket.close()
                         true
                     } catch (e: IOException) {
                         false
                     }
                 }
-
                 if (result == true) {
-                    Log.d(TAG, "FOUND HOSTED GAME on $name ($address)")
+                    Log.d(TAG, "FOUND HOSTED GAME on bonded device $name ($address)")
                     addHostedGame(name, address)
-                } else {
-                    Log.d(TAG, "No game on $name ($address)")
                 }
             } catch (e: Exception) {
                 Log.d(TAG, "Probe failed for $name: ${e.message}")
             }
         }
-        probeJobs.add(job)
     }
 
     private fun addHostedGame(name: String, address: String) {
@@ -336,24 +353,31 @@ class BluetoothConnectionManager(private val context: Context) {
         }
     }
 
+    private fun stopBleScan() {
+        try {
+            bleScanner?.stopScan(bleScanCallback)
+            Log.d(TAG, "BLE scan stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping BLE scan: ${e.message}")
+        }
+    }
+
     fun stopDiscovery() {
-        discoveryStarted.set(false)
-        bluetoothAdapter?.cancelDiscovery()
-        probeJobs.forEach { it.cancel() }
-        probeJobs.clear()
+        stopBleScan()
+        scanJob?.cancel()
+        scanJob = null
         _isScanning.value = false
     }
 
-    /**
-     * Connect to a host device for real (client side).
-     * Sends a handshake message so the host knows this is a real client (not a probe).
-     */
+    // ---- CLIENT CONNECT ----
+
     suspend fun connectToDevice(address: String): Boolean = withContext(Dispatchers.IO) {
         try {
             _connectionState.value = BluetoothConnectionState.CONNECTING
             _errorMessage.value = null
 
-            bluetoothAdapter?.cancelDiscovery()
+            // Stop BLE scan before RFCOMM connect
+            stopBleScan()
 
             val device = bluetoothAdapter?.getRemoteDevice(address)
             if (device == null) {
@@ -362,10 +386,9 @@ class BluetoothConnectionManager(private val context: Context) {
                 return@withContext false
             }
 
-            // Use insecure connection to avoid pairing prompt
             clientSocket = device.createInsecureRfcommSocketToServiceRecord(SERVICE_UUID)
 
-            Log.d(TAG, "Connecting to ${device.name}...")
+            Log.d(TAG, "Connecting to ${device.name} ($address) via RFCOMM...")
             clientSocket?.connect()
 
             clientSocket?.let { socket ->
@@ -373,7 +396,7 @@ class BluetoothConnectionManager(private val context: Context) {
                 setupStreams(socket)
                 _connectedDeviceName.value = device.name ?: "Unknown Device"
 
-                // Send handshake so the server knows we're a real client
+                // Send handshake
                 val handshakeData = ("POKEMON_GUESS_WHO_JOIN\n").toByteArray(Charsets.UTF_8)
                 outputStream?.write(handshakeData)
                 outputStream?.flush()
@@ -444,6 +467,8 @@ class BluetoothConnectionManager(private val context: Context) {
         serverJob?.cancel()
         serverJob = null
 
+        stopBleAdvertising()
+
         try {
             inputReader?.close()
             outputStream?.close()
@@ -468,14 +493,5 @@ class BluetoothConnectionManager(private val context: Context) {
     fun cleanup() {
         stopDiscovery()
         disconnect()
-
-        if (isReceiverRegistered) {
-            try {
-                context.unregisterReceiver(discoveryReceiver)
-            } catch (e: Exception) {
-                Log.e(TAG, "Unregister receiver error", e)
-            }
-            isReceiverRegistered = false
-        }
     }
 }

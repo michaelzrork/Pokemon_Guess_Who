@@ -63,22 +63,7 @@ fun MainMenuScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Title
-            Text(
-                text = "Pokemon",
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                style = MaterialTheme.typography.displayLarge
-            )
-            Text(
-                text = "Guess Who",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFFEB3B)
-            )
-
-            Box(modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             when {
                 isLoading -> {
