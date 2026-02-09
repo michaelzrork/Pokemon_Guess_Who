@@ -1,5 +1,6 @@
 package com.example.pokemonguesswho.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +57,13 @@ fun AppNavigation(viewModel: PokemonViewModel) {
                     navController.navigate(Screen.ClientLobby.route) {
                         launchSingleTop = true
                     }
+                },
+                onResumeGame = {
+                    if (viewModel.restoreSavedGame()) {
+                        navController.navigate(Screen.Game.route) {
+                            launchSingleTop = true
+                        }
+                    }
                 }
             )
         }
@@ -70,7 +78,18 @@ fun AppNavigation(viewModel: PokemonViewModel) {
             )
         }
         composable(Screen.Game.route) {
-            GameScreenUpdated(viewModel)
+            // Back press goes to main menu without losing game state (it's saved)
+            BackHandler {
+                navController.popBackStack(Screen.MainMenu.route, inclusive = false)
+            }
+
+            GameScreenUpdated(
+                viewModel = viewModel,
+                onEndGame = {
+                    viewModel.endGame()
+                    navController.popBackStack(Screen.MainMenu.route, inclusive = false)
+                }
+            )
         }
     }
 }

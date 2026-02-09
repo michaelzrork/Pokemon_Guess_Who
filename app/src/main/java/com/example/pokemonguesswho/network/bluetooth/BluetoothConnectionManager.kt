@@ -3,9 +3,14 @@ package com.example.pokemonguesswho.network.bluetooth
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothServerSocket
-import android.bluetooth.BluetoothSocket
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -26,13 +31,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.BufferedReader
-import java.io.IOException
-import java.io.InputStreamReader
-import java.io.OutputStream
 import java.util.UUID
+import kotlin.coroutines.resume
 
 enum class BluetoothConnectionState {
     DISCONNECTED,
@@ -53,23 +56,17 @@ class BluetoothConnectionManager(private val context: Context) {
 
     companion object {
         private const val TAG = "BTConnectionManager"
-        // UUID for RFCOMM connection
-        private val SERVICE_UUID = UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        private const val SERVICE_NAME = "PokemonGuessWho"
-        // UUID for BLE advertising — uses a 16-bit short UUID embedded in the standard BLE base
-        private val BLE_SERVICE_UUID = ParcelUuid.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
+        // BLE service UUID for advertising and GATT service
+        private val BLE_SERVICE_UUID = UUID.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
+        private val BLE_SERVICE_PARCEL_UUID = ParcelUuid.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
+        // Characteristic for board data transfer (client writes request, host sends notification)
+        private val BOARD_CHAR_UUID = UUID.fromString("0000ABCE-0000-1000-8000-00805F9B34FB")
         private const val BLE_SCAN_DURATION_MS = 15000L
     }
 
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
-
-    private var serverSocket: BluetoothServerSocket? = null
-    private var clientSocket: BluetoothSocket? = null
-    private var connectedSocket: BluetoothSocket? = null
-    private var inputReader: BufferedReader? = null
-    private var outputStream: OutputStream? = null
 
     private val _connectionState = MutableStateFlow(BluetoothConnectionState.DISCONNECTED)
     val connectionState: StateFlow<BluetoothConnectionState> = _connectionState.asStateFlow()
@@ -93,10 +90,22 @@ class BluetoothConnectionManager(private val context: Context) {
     private var bleAdvertiser: BluetoothLeAdvertiser? = null
     private var isAdvertising = false
 
+    // BLE GATT server (host side)
+    private var gattServer: BluetoothGattServer? = null
+    private var boardDataToSend: String? = null
+    private var onClientConnectedCallback: (() -> Unit)? = null
+
     // BLE scanner (client side)
     private var bleScanner: BluetoothLeScanner? = null
     private var scanJob: Job? = null
     private val discoveredAddresses = mutableSetOf<String>()
+
+    // BLE GATT client (client side)
+    private var gattClient: BluetoothGatt? = null
+    private var receivedBoardData: String? = null
+
+    // Store discovered BLE devices so we can connect via GATT
+    private val discoveredBleDevices = mutableMapOf<String, BluetoothDevice>()
 
     private val bleScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -106,6 +115,7 @@ class BluetoothConnectionManager(private val context: Context) {
 
             if (discoveredAddresses.add(address)) {
                 Log.d(TAG, "BLE scan found game host: $name ($address) RSSI=${result.rssi}")
+                discoveredBleDevices[address] = device
                 addHostedGame(name, address)
             }
         }
@@ -126,7 +136,6 @@ class BluetoothConnectionManager(private val context: Context) {
         override fun onStartFailure(errorCode: Int) {
             Log.e(TAG, "BLE advertising failed to start: errorCode=$errorCode")
             isAdvertising = false
-            // Fall through — RFCOMM server still works for paired devices
         }
     }
 
@@ -134,95 +143,160 @@ class BluetoothConnectionManager(private val context: Context) {
 
     fun isBluetoothEnabled(): Boolean = bluetoothAdapter?.isEnabled == true
 
-    // ---- SERVER SIDE (Host) ----
+    // ---- HOST SIDE: GATT Server + BLE Advertising ----
+
+    /**
+     * Set the board data that will be sent to the client when they connect.
+     * Must be called before startServerAsync.
+     */
+    fun setBoardData(json: String) {
+        boardDataToSend = json
+        Log.d(TAG, "Board data set (${json.length} chars)")
+    }
 
     fun startServerAsync(scope: CoroutineScope, onConnected: () -> Unit, onError: () -> Unit) {
         serverJob?.cancel()
+        onClientConnectedCallback = onConnected
+
         serverJob = scope.launch(Dispatchers.IO) {
             try {
                 _connectionState.value = BluetoothConnectionState.LISTENING
                 _errorMessage.value = null
 
-                serverSocket = bluetoothAdapter?.listenUsingInsecureRfcommWithServiceRecord(SERVICE_NAME, SERVICE_UUID)
-
-                if (serverSocket == null) {
+                // Start GATT server
+                val started = startGattServer()
+                if (!started) {
                     _connectionState.value = BluetoothConnectionState.ERROR
-                    _errorMessage.value = "Could not create server socket"
+                    _errorMessage.value = "Could not start GATT server"
                     onError()
                     return@launch
                 }
 
-                Log.d(TAG, "RFCOMM server listening...")
-
                 // Start BLE advertising so clients can find us
                 startBleAdvertising()
 
-                while (true) {
-                    val socket: BluetoothSocket
-                    try {
-                        socket = serverSocket?.accept() ?: break
-                    } catch (e: IOException) {
-                        if (_connectionState.value == BluetoothConnectionState.LISTENING) {
-                            Log.d(TAG, "Server socket closed while listening")
-                        }
-                        break
-                    }
-
-                    Log.d(TAG, "Accepted connection from: ${socket.remoteDevice?.name} (${socket.remoteDevice?.address})")
-
-                    try {
-                        val reader = BufferedReader(InputStreamReader(socket.inputStream))
-
-                        val handshake = withTimeoutOrNull(3000L) {
-                            try {
-                                reader.readLine()
-                            } catch (e: IOException) {
-                                null
-                            }
-                        }
-
-                        if (handshake == "POKEMON_GUESS_WHO_JOIN") {
-                            connectedSocket = socket
-                            inputReader = reader
-                            outputStream = socket.outputStream
-                            _connectedDeviceName.value = socket.remoteDevice?.name ?: "Unknown Device"
-                            _connectionState.value = BluetoothConnectionState.CONNECTED
-                            Log.d(TAG, "Real client connected: ${socket.remoteDevice?.name}")
-
-                            // Stop advertising and close server socket
-                            stopBleAdvertising()
-                            try { serverSocket?.close() } catch (_: IOException) {}
-                            serverSocket = null
-
-                            onConnected()
-                            return@launch
-                        } else {
-                            Log.d(TAG, "Probe/invalid connection from ${socket.remoteDevice?.name}, continuing...")
-                            try { socket.close() } catch (_: IOException) {}
-                        }
-                    } catch (e: Exception) {
-                        Log.d(TAG, "Connection dropped (probe): ${e.message}")
-                        try { socket.close() } catch (_: IOException) {}
-                    }
-                }
-
-                if (_connectionState.value == BluetoothConnectionState.LISTENING) {
-                    _connectionState.value = BluetoothConnectionState.ERROR
-                    _errorMessage.value = "Server closed unexpectedly"
-                    onError()
-                }
-            } catch (e: IOException) {
+                Log.d(TAG, "Host ready: GATT server + BLE advertising active")
+            } catch (e: Exception) {
                 Log.e(TAG, "Server error", e)
-                if (_connectionState.value == BluetoothConnectionState.LISTENING) {
-                    _connectionState.value = BluetoothConnectionState.ERROR
-                    _errorMessage.value = "Server error: ${e.message}"
-                    onError()
-                }
+                _connectionState.value = BluetoothConnectionState.ERROR
+                _errorMessage.value = "Server error: ${e.message}"
+                onError()
             }
         }
     }
 
-    // ---- BLE ADVERTISING (Host broadcasts presence) ----
+    private fun startGattServer(): Boolean {
+        val manager = bluetoothManager ?: return false
+
+        gattServer = manager.openGattServer(context, object : BluetoothGattServerCallback() {
+            override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_CONNECTED && device != null) {
+                    Log.d(TAG, "GATT client connected: ${device.name} (${device.address})")
+                    _connectedDeviceName.value = device.name ?: "Unknown Device"
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.d(TAG, "GATT client disconnected")
+                }
+            }
+
+            override fun onCharacteristicWriteRequest(
+                device: BluetoothDevice?,
+                requestId: Int,
+                characteristic: BluetoothGattCharacteristic?,
+                preparedWrite: Boolean,
+                responseNeeded: Boolean,
+                offset: Int,
+                value: ByteArray?
+            ) {
+                if (characteristic?.uuid == BOARD_CHAR_UUID && value != null) {
+                    val request = String(value, Charsets.UTF_8)
+                    Log.d(TAG, "GATT write request from ${device?.name}: $request")
+
+                    if (request == "JOIN") {
+                        // Send response acknowledging the write
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                        }
+
+                        // Send the board data back via chunks
+                        val data = boardDataToSend
+                        if (data != null && device != null && characteristic != null) {
+                            sendBoardDataToClient(device, characteristic, data)
+                        }
+                    } else {
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                        }
+                    }
+                } else {
+                    if (responseNeeded && device != null) {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                    }
+                }
+            }
+
+            override fun onCharacteristicReadRequest(
+                device: BluetoothDevice?,
+                requestId: Int,
+                offset: Int,
+                characteristic: BluetoothGattCharacteristic?
+            ) {
+                if (characteristic?.uuid == BOARD_CHAR_UUID && device != null) {
+                    val data = boardDataToSend ?: ""
+                    val bytes = data.toByteArray(Charsets.UTF_8)
+                    // Handle offset for large data
+                    val chunk = if (offset < bytes.size) {
+                        bytes.copyOfRange(offset, bytes.size)
+                    } else {
+                        byteArrayOf()
+                    }
+                    Log.d(TAG, "GATT read request from ${device.name}, offset=$offset, sending ${chunk.size} bytes")
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, chunk)
+                } else {
+                    if (device != null) {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                    }
+                }
+            }
+        })
+
+        if (gattServer == null) return false
+
+        // Create the GATT service with the board data characteristic
+        val service = BluetoothGattService(
+            BLE_SERVICE_UUID,
+            BluetoothGattService.SERVICE_TYPE_PRIMARY
+        )
+
+        val boardCharacteristic = BluetoothGattCharacteristic(
+            BOARD_CHAR_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or
+                    BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_READ or
+                    BluetoothGattCharacteristic.PERMISSION_WRITE
+        )
+        service.addCharacteristic(boardCharacteristic)
+
+        val added = gattServer?.addService(service) ?: false
+        Log.d(TAG, "GATT service added: $added")
+        return added
+    }
+
+    private fun sendBoardDataToClient(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic,
+        data: String
+    ) {
+        // The client will read the data via READ requests
+        // Notify that data is available and mark as connected
+        Log.d(TAG, "Client requested board data, marking connected")
+        _connectionState.value = BluetoothConnectionState.CONNECTED
+
+        // Stop advertising since we have a client
+        stopBleAdvertising()
+
+        // Trigger the callback
+        onClientConnectedCallback?.invoke()
+    }
 
     private fun startBleAdvertising() {
         bleAdvertiser = bluetoothAdapter?.bluetoothLeAdvertiser
@@ -234,18 +308,18 @@ class BluetoothConnectionManager(private val context: Context) {
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(false) // We don't use BLE GATT — just advertising for discovery
+            .setConnectable(true) // Clients need to connect via GATT
             .setTimeout(0) // Advertise indefinitely
             .build()
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(true)
-            .addServiceUuid(BLE_SERVICE_UUID)
+            .addServiceUuid(BLE_SERVICE_PARCEL_UUID)
             .build()
 
         try {
             bleAdvertiser?.startAdvertising(settings, data, bleAdvertiseCallback)
-            Log.d(TAG, "Starting BLE advertising with UUID: $BLE_SERVICE_UUID")
+            Log.d(TAG, "Starting BLE advertising with UUID: $BLE_SERVICE_PARCEL_UUID")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start BLE advertising: ${e.message}")
         }
@@ -263,7 +337,7 @@ class BluetoothConnectionManager(private val context: Context) {
         }
     }
 
-    // ---- CLIENT SIDE (Joiner) ----
+    // ---- CLIENT SIDE: BLE Scan + GATT Client ----
 
     fun startDiscovery() {
         _connectionState.value = BluetoothConnectionState.DISCOVERING
@@ -271,6 +345,7 @@ class BluetoothConnectionManager(private val context: Context) {
         _discoveredGames.value = emptyList()
         _isScanning.value = true
         discoveredAddresses.clear()
+        discoveredBleDevices.clear()
 
         bleScanner = bluetoothAdapter?.bluetoothLeScanner
         if (bleScanner == null) {
@@ -282,7 +357,7 @@ class BluetoothConnectionManager(private val context: Context) {
 
         // Scan filter: only find devices advertising our service UUID
         val filter = ScanFilter.Builder()
-            .setServiceUuid(BLE_SERVICE_UUID)
+            .setServiceUuid(BLE_SERVICE_PARCEL_UUID)
             .build()
 
         val settings = ScanSettings.Builder()
@@ -291,16 +366,11 @@ class BluetoothConnectionManager(private val context: Context) {
 
         try {
             bleScanner?.startScan(listOf(filter), settings, bleScanCallback)
-            Log.d(TAG, "BLE scan started, looking for service UUID: $BLE_SERVICE_UUID")
+            Log.d(TAG, "BLE scan started, looking for service UUID: $BLE_SERVICE_PARCEL_UUID")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start BLE scan: ${e.message}")
             _isScanning.value = false
             return
-        }
-
-        // Also probe bonded devices via RFCOMM — they might be hosting without BLE
-        bluetoothAdapter?.bondedDevices?.forEach { device ->
-            probeDevice(device)
         }
 
         // Auto-stop scan after timeout
@@ -312,35 +382,6 @@ class BluetoothConnectionManager(private val context: Context) {
                     stopBleScan()
                     _isScanning.value = false
                 }
-            }
-        }
-    }
-
-    private fun probeDevice(device: BluetoothDevice) {
-        val address = device.address ?: return
-        val name = device.name ?: device.address ?: return
-
-        if (!discoveredAddresses.add(address)) return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                Log.d(TAG, "Probing bonded device $name ($address)...")
-                val result = withTimeoutOrNull(5000L) {
-                    try {
-                        val probeSocket = device.createInsecureRfcommSocketToServiceRecord(SERVICE_UUID)
-                        probeSocket.connect()
-                        probeSocket.close()
-                        true
-                    } catch (e: IOException) {
-                        false
-                    }
-                }
-                if (result == true) {
-                    Log.d(TAG, "FOUND HOSTED GAME on bonded device $name ($address)")
-                    addHostedGame(name, address)
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "Probe failed for $name: ${e.message}")
             }
         }
     }
@@ -369,99 +410,173 @@ class BluetoothConnectionManager(private val context: Context) {
         _isScanning.value = false
     }
 
-    // ---- CLIENT CONNECT ----
+    // ---- CLIENT CONNECT via GATT ----
 
-    suspend fun connectToDevice(address: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Connect to the host via BLE GATT, send JOIN request, and read the board data.
+     * Returns the board JSON string, or null on failure.
+     */
+    suspend fun connectAndGetBoardData(address: String): String? = withContext(Dispatchers.IO) {
         try {
             _connectionState.value = BluetoothConnectionState.CONNECTING
             _errorMessage.value = null
 
-            // Stop BLE scan before RFCOMM connect
+            // Stop BLE scan before connecting
             stopBleScan()
 
-            val device = bluetoothAdapter?.getRemoteDevice(address)
+            val device = discoveredBleDevices[address]
+                ?: bluetoothAdapter?.getRemoteDevice(address)
+
             if (device == null) {
                 _connectionState.value = BluetoothConnectionState.ERROR
                 _errorMessage.value = "Device not found"
-                return@withContext false
+                return@withContext null
             }
 
-            clientSocket = device.createInsecureRfcommSocketToServiceRecord(SERVICE_UUID)
+            Log.d(TAG, "Connecting to ${device.name} ($address) via BLE GATT...")
 
-            Log.d(TAG, "Connecting to ${device.name} ($address) via RFCOMM...")
-            clientSocket?.connect()
+            val boardData = connectGattAndRead(device)
 
-            clientSocket?.let { socket ->
-                connectedSocket = socket
-                setupStreams(socket)
+            if (boardData != null) {
                 _connectedDeviceName.value = device.name ?: "Unknown Device"
-
-                // Send handshake
-                val handshakeData = ("POKEMON_GUESS_WHO_JOIN\n").toByteArray(Charsets.UTF_8)
-                outputStream?.write(handshakeData)
-                outputStream?.flush()
-                Log.d(TAG, "Sent handshake to ${device.name}")
-
                 _connectionState.value = BluetoothConnectionState.CONNECTED
-                Log.d(TAG, "Connected to ${device.name}")
-                return@withContext true
+                Log.d(TAG, "Got board data (${boardData.length} chars) from ${device.name}")
+            } else {
+                _connectionState.value = BluetoothConnectionState.ERROR
+                _errorMessage.value = "Failed to get board data"
             }
 
-            _connectionState.value = BluetoothConnectionState.ERROR
-            _errorMessage.value = "Connection failed"
-            return@withContext false
-        } catch (e: IOException) {
-            Log.e(TAG, "Connect error", e)
+            return@withContext boardData
+        } catch (e: Exception) {
+            Log.e(TAG, "GATT connect error", e)
             _connectionState.value = BluetoothConnectionState.ERROR
             _errorMessage.value = "Connection failed: ${e.message}"
-            return@withContext false
+            return@withContext null
         }
     }
 
-    // ---- DATA TRANSFER ----
+    @SuppressLint("MissingPermission")
+    private suspend fun connectGattAndRead(device: BluetoothDevice): String? {
+        return withTimeoutOrNull(15000L) {
+            suspendCancellableCoroutine { continuation ->
+                var resumed = false
 
-    private fun setupStreams(socket: BluetoothSocket) {
-        inputReader = BufferedReader(InputStreamReader(socket.inputStream))
-        outputStream = socket.outputStream
-    }
+                val gatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
+                    override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+                        if (newState == BluetoothProfile.STATE_CONNECTED) {
+                            Log.d(TAG, "GATT connected, discovering services...")
+                            gatt?.discoverServices()
+                        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                            Log.d(TAG, "GATT disconnected (status=$status)")
+                            if (!resumed) {
+                                resumed = true
+                                continuation.resume(null)
+                            }
+                        }
+                    }
 
-    suspend fun sendMessage(message: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            outputStream?.let { stream ->
-                val data = (message + "\n").toByteArray(Charsets.UTF_8)
-                stream.write(data)
-                stream.flush()
-                Log.d(TAG, "Sent: ${message.take(100)}...")
-                return@withContext true
+                    override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                        if (status == BluetoothGatt.GATT_SUCCESS) {
+                            Log.d(TAG, "GATT services discovered")
+                            val service = gatt?.getService(BLE_SERVICE_UUID)
+                            val characteristic = service?.getCharacteristic(BOARD_CHAR_UUID)
+
+                            if (characteristic != null) {
+                                // Write "JOIN" to the characteristic to request board data
+                                characteristic.setValue("JOIN".toByteArray(Charsets.UTF_8))
+                                val writeStarted = gatt.writeCharacteristic(characteristic)
+                                Log.d(TAG, "Write JOIN started: $writeStarted")
+                            } else {
+                                Log.e(TAG, "Board characteristic not found")
+                                if (!resumed) {
+                                    resumed = true
+                                    gatt?.disconnect()
+                                    continuation.resume(null)
+                                }
+                            }
+                        } else {
+                            Log.e(TAG, "Service discovery failed: $status")
+                            if (!resumed) {
+                                resumed = true
+                                gatt?.disconnect()
+                                continuation.resume(null)
+                            }
+                        }
+                    }
+
+                    override fun onCharacteristicWrite(
+                        gatt: BluetoothGatt?,
+                        characteristic: BluetoothGattCharacteristic?,
+                        status: Int
+                    ) {
+                        if (status == BluetoothGatt.GATT_SUCCESS && characteristic?.uuid == BOARD_CHAR_UUID) {
+                            Log.d(TAG, "JOIN written successfully, now reading board data...")
+                            // Read the board data from the characteristic
+                            gatt?.readCharacteristic(characteristic)
+                        } else {
+                            Log.e(TAG, "Write failed: $status")
+                            if (!resumed) {
+                                resumed = true
+                                gatt?.disconnect()
+                                continuation.resume(null)
+                            }
+                        }
+                    }
+
+                    override fun onCharacteristicRead(
+                        gatt: BluetoothGatt?,
+                        characteristic: BluetoothGattCharacteristic?,
+                        status: Int
+                    ) {
+                        if (status == BluetoothGatt.GATT_SUCCESS && characteristic?.uuid == BOARD_CHAR_UUID) {
+                            val data = characteristic?.value?.let { String(it, Charsets.UTF_8) }
+                            Log.d(TAG, "Read board data: ${data?.take(100)}...")
+
+                            // Disconnect after reading
+                            gatt?.disconnect()
+                            gatt?.close()
+                            gattClient = null
+
+                            if (!resumed) {
+                                resumed = true
+                                continuation.resume(data)
+                            }
+                        } else {
+                            Log.e(TAG, "Read failed: $status")
+                            if (!resumed) {
+                                resumed = true
+                                gatt?.disconnect()
+                                continuation.resume(null)
+                            }
+                        }
+                    }
+                }, BluetoothDevice.TRANSPORT_LE)
+
+                gattClient = gatt
+
+                continuation.invokeOnCancellation {
+                    gatt?.disconnect()
+                    gatt?.close()
+                    gattClient = null
+                }
             }
-            false
-        } catch (e: IOException) {
-            Log.e(TAG, "Send error", e)
-            handleDisconnection()
-            false
         }
     }
 
-    suspend fun readMessage(): String? = withContext(Dispatchers.IO) {
-        try {
-            val line = inputReader?.readLine()
-            if (line != null) {
-                Log.d(TAG, "Received: ${line.take(100)}...")
-            }
-            line
-        } catch (e: IOException) {
-            Log.e(TAG, "Read error", e)
-            handleDisconnection()
-            null
-        }
+    // Keep these for ViewModel compatibility (but they're no longer used for RFCOMM)
+    suspend fun sendMessage(message: String): Boolean {
+        // Board data is now sent via GATT server read requests
+        // This is kept for API compatibility but the data is set via setBoardData()
+        return true
+    }
+
+    suspend fun readMessage(): String? {
+        // Board data is now received via GATT client read
+        // This is kept for API compatibility
+        return null
     }
 
     // ---- CLEANUP ----
-
-    private fun handleDisconnection() {
-        _connectionState.value = BluetoothConnectionState.DISCONNECTED
-        _connectedDeviceName.value = null
-    }
 
     fun disconnect() {
         serverJob?.cancel()
@@ -470,20 +585,17 @@ class BluetoothConnectionManager(private val context: Context) {
         stopBleAdvertising()
 
         try {
-            inputReader?.close()
-            outputStream?.close()
-            connectedSocket?.close()
-            clientSocket?.close()
-            serverSocket?.close()
-        } catch (e: IOException) {
+            gattServer?.close()
+            gattClient?.disconnect()
+            gattClient?.close()
+        } catch (e: Exception) {
             Log.e(TAG, "Disconnect error", e)
         }
 
-        inputReader = null
-        outputStream = null
-        connectedSocket = null
-        clientSocket = null
-        serverSocket = null
+        gattServer = null
+        gattClient = null
+        boardDataToSend = null
+        onClientConnectedCallback = null
 
         _connectionState.value = BluetoothConnectionState.DISCONNECTED
         _connectedDeviceName.value = null

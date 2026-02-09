@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Card
@@ -51,7 +52,7 @@ import com.example.pokemonguesswho.ui.components.PokemonCardComponent
 import com.example.pokemonguesswho.ui.components.pinchToZoom
 
 @Composable
-fun GameScreenUpdated(viewModel: PokemonViewModel) {
+fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val opponentFoundMessage by viewModel.opponentFoundMessage.collectAsState()
@@ -68,12 +69,13 @@ fun GameScreenUpdated(viewModel: PokemonViewModel) {
                 WaitingForPlayerBar()
             }
 
-            // Top bar: My Pokemon card (compact) + Hide/Show toggle
+            // Top bar: My Pokemon card (compact) + Hide/Show toggle + End Game
             gameState.myPokemon?.let { myPoke ->
                 MyPokemonTopBar(
                     pokemon = myPoke,
                     showEliminated = gameState.showEliminated,
-                    onToggleEliminated = { viewModel.toggleShowEliminated() }
+                    onToggleEliminated = { viewModel.toggleShowEliminated() },
+                    onEndGame = onEndGame
                 )
             }
 
@@ -173,7 +175,8 @@ fun OpponentFoundBanner(message: String) {
 fun MyPokemonTopBar(
     pokemon: GamePokemon,
     showEliminated: Boolean,
-    onToggleEliminated: () -> Unit
+    onToggleEliminated: () -> Unit,
+    onEndGame: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -236,23 +239,45 @@ fun MyPokemonTopBar(
                 )
             }
 
-            // Hide/Show eliminated toggle button
-            FilledIconButton(
-                onClick = onToggleEliminated,
-                modifier = Modifier.size(38.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = if (showEliminated)
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.secondaryContainer
-                )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
-                    modifier = Modifier.size(18.dp)
-                )
+                // Hide/Show eliminated toggle button
+                FilledIconButton(
+                    onClick = onToggleEliminated,
+                    modifier = Modifier.size(34.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (showEliminated)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // End Game button
+                FilledIconButton(
+                    onClick = onEndGame,
+                    modifier = Modifier.size(34.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Color(0xFFE53935)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "End Game",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

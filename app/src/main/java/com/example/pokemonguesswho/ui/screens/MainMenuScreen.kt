@@ -43,13 +43,15 @@ import com.example.pokemonguesswho.data.PokemonViewModel
 fun MainMenuScreen(
     viewModel: PokemonViewModel,
     onStartGame: () -> Unit,
-    onJoinGame: () -> Unit
+    onJoinGame: () -> Unit,
+    onResumeGame: () -> Unit = {}
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val loadingProgress by viewModel.loadingProgress.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val hasSavedGame = viewModel.hasSavedGame()
 
     Box(
         modifier = Modifier
@@ -112,6 +114,28 @@ fun MainMenuScreen(
 
                 else -> {
                     Box(modifier = Modifier.size(16.dp))
+
+                    // Resume Game Button (only shown if there's a saved game)
+                    if (hasSavedGame) {
+                        Button(
+                            onClick = onResumeGame,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFFEB3B)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                "Resume Game",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(12.dp),
+                                color = Color.Black
+                            )
+                        }
+                    }
 
                     // Start a Game Button
                     Button(

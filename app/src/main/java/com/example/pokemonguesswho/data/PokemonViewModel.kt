@@ -1,6 +1,7 @@
 package com.example.pokemonguesswho.data
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokemonguesswho.game.GameManager
@@ -9,6 +10,7 @@ import com.example.pokemonguesswho.network.PokemonApiClient
 import com.example.pokemonguesswho.network.bluetooth.BluetoothConnectionManager
 import com.example.pokemonguesswho.network.bluetooth.BluetoothDeviceInfo
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +18,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class BoardData(
-    val pokemonIds: List<Int>
+    val pokemonIds: List<Int>,
+    val hostPokemonId: Int = -1
+)
+
+data class SavedGameData(
+    val boardPokemonIds: List<Int>,
+    val eliminatedIds: List<Int>,
+    val myPokemonId: Int,
+    val showEliminated: Boolean,
+    val cardSizeDp: Float,
+    val isHost: Boolean
 )
 
 enum class LobbyState {
@@ -34,6 +46,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     private val gameManager = GameManager()
     private val gson = Gson()
     val bluetoothManager = BluetoothConnectionManager(application.applicationContext)
+    private val prefs = application.getSharedPreferences("pokemon_game", Context.MODE_PRIVATE)
 
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -173,6 +186,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 cardSizeDp = 120f,
                 isHost = true
             )
+            saveGameState()
 
             // Start Bluetooth server and wait for opponent
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
@@ -181,19 +195,26 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun startBluetoothServer() {
+        // Set board data on the GATT server before starting
+        val boardJson = exportBoardAsJson()
+        bluetoothManager.setBoardData(boardJson)
+
         bluetoothManager.startServerAsync(
             scope = viewModelScope,
             onConnected = {
-                // Send board data to the client
+                // Client received the board data
                 viewModelScope.launch {
-                    val boardJson = exportBoardAsJson()
-                    bluetoothManager.sendMessage(boardJson)
                     _lobbyState.value = LobbyState.CONNECTED
 
                     // Show "Player Found!" notification on game screen
                     val name = bluetoothManager.connectedDeviceName.value ?: "Opponent"
                     _opponentFoundMessage.value = "Player Found! $name joined!"
-                    delay(3000)
+
+                    // Clean up BLE resources after a short delay
+                    delay(1000)
+                    bluetoothManager.disconnect()
+
+                    delay(2000)
                     _opponentFoundMessage.value = null
                 }
             },
@@ -226,17 +247,13 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _lobbyState.value = LobbyState.CONNECTING
 
-            val connected = bluetoothManager.connectToDevice(device.address)
-            if (connected) {
-                // Read the board data from the host
-                val boardJson = bluetoothManager.readMessage()
-                if (boardJson != null) {
-                    val success = joinGameFromJson(boardJson)
-                    if (success) {
-                        _lobbyState.value = LobbyState.CONNECTED
-                    } else {
-                        _lobbyState.value = LobbyState.ERROR
-                    }
+            // Connect via BLE GATT, send JOIN, read board data, disconnect — all in one call
+            val boardJson = bluetoothManager.connectAndGetBoardData(device.address)
+
+            if (boardJson != null) {
+                val success = joinGameFromJson(boardJson)
+                if (success) {
+                    _lobbyState.value = LobbyState.CONNECTED
                 } else {
                     _lobbyState.value = LobbyState.ERROR
                 }
@@ -250,7 +267,11 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
 
     private fun exportBoardAsJson(): String {
         val board = _gameState.value.board
-        val boardData = BoardData(pokemonIds = board.map { it.pokemonId })
+        val hostPokemonId = _gameState.value.myPokemon?.pokemonId ?: -1
+        val boardData = BoardData(
+            pokemonIds = board.map { it.pokemonId },
+            hostPokemonId = hostPokemonId
+        )
         return gson.toJson(boardData)
     }
 
@@ -274,7 +295,13 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     delay(100)
                 }
 
-                val myPokemon = board.random()
+                // Pick a pokemon that isn't the host's pokemon
+                val available = if (boardData.hostPokemonId > 0) {
+                    board.filter { it.pokemonId != boardData.hostPokemonId }
+                } else {
+                    board
+                }
+                val myPokemon = available.random()
 
                 repeat(6) {
                     _shuffleDisplayPokemon.value = board.random()
@@ -294,6 +321,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     cardSizeDp = 120f,
                     isHost = false
                 )
+                saveGameState()
             }
             true
         } catch (e: Exception) {
@@ -307,6 +335,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             if (it.pokemonId == pokemon.pokemonId) updated else it
         }
         _gameState.value = _gameState.value.copy(board = newBoard)
+        saveGameState()
     }
 
     fun setCardSize(size: Float) {
@@ -317,10 +346,70 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         _gameState.value = _gameState.value.copy(
             showEliminated = !_gameState.value.showEliminated
         )
+        saveGameState()
     }
 
     fun resetLobby() {
         bluetoothManager.disconnect()
+        _lobbyState.value = LobbyState.IDLE
+    }
+
+    // ---- GAME PERSISTENCE ----
+
+    fun hasSavedGame(): Boolean {
+        return prefs.contains("saved_game")
+    }
+
+    private fun saveGameState() {
+        val state = _gameState.value
+        if (state.board.isEmpty() || state.myPokemon == null) return
+
+        val savedData = SavedGameData(
+            boardPokemonIds = state.board.map { it.pokemonId },
+            eliminatedIds = state.board.filter { it.isEliminated }.map { it.pokemonId },
+            myPokemonId = state.myPokemon.pokemonId,
+            showEliminated = state.showEliminated,
+            cardSizeDp = state.cardSizeDp,
+            isHost = state.isHost
+        )
+        prefs.edit().putString("saved_game", gson.toJson(savedData)).apply()
+    }
+
+    fun restoreSavedGame(): Boolean {
+        val json = prefs.getString("saved_game", null) ?: return false
+        val allPokemon = _pokemonList.value
+        if (allPokemon.isEmpty()) return false
+
+        return try {
+            val savedData = gson.fromJson(json, SavedGameData::class.java)
+            val pokemonMap = allPokemon.associateBy { it.pokemonId }
+            val eliminatedSet = savedData.eliminatedIds.toSet()
+
+            val board = savedData.boardPokemonIds.mapNotNull { id ->
+                pokemonMap[id]?.copy(isEliminated = id in eliminatedSet)
+            }
+            val myPokemon = pokemonMap[savedData.myPokemonId]
+
+            if (board.size < 2 || myPokemon == null) return false
+
+            _gameState.value = GameState(
+                board = board,
+                myPokemon = myPokemon,
+                showEliminated = savedData.showEliminated,
+                cardSizeDp = savedData.cardSizeDp,
+                isHost = savedData.isHost
+            )
+            _lobbyState.value = LobbyState.CONNECTED
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun endGame() {
+        prefs.edit().remove("saved_game").apply()
+        bluetoothManager.disconnect()
+        _gameState.value = GameState()
         _lobbyState.value = LobbyState.IDLE
     }
 
