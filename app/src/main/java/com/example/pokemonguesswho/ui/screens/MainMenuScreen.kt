@@ -190,7 +190,7 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
         modifier = Modifier.padding(24.dp)
     ) {
         Text(
-            text = "Shuffling...",
+            text = "Loading...",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFFFFEB3B)

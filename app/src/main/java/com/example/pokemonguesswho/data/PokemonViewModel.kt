@@ -4,18 +4,26 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import coil.ImageLoader
+import coil.request.ImageRequest
 import com.example.pokemonguesswho.game.GameManager
 import com.example.pokemonguesswho.game.GameState
-import com.example.pokemonguesswho.network.PokemonApiClient
 import com.example.pokemonguesswho.network.bluetooth.BluetoothConnectionManager
 import com.example.pokemonguesswho.network.bluetooth.BluetoothDeviceInfo
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
 
 data class BoardData(
     val pokemonIds: List<Int>,
@@ -96,47 +104,45 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             try {
                 _isLoading.value = true
                 _loadingProgress.value = 0f
-                val response = PokemonApiClient.pokemonService.getPokemonList(limit = 151)
-                val pokemonDataList = mutableListOf<GamePokemon>()
-                val total = response.results.size
 
-                response.results.forEachIndexed { index, result ->
-                    try {
-                        val details = PokemonApiClient.pokemonService.getPokemonByName(result.name)
-                        val imageUrl = details.sprites.other?.officialArtwork?.frontDefault
-                            ?: details.sprites.frontDefault
-                            ?: ""
-
-                        val types = details.types.sortedBy { it.slot }
-                            .map { it.type.name.replaceFirstChar { c -> c.uppercase() } }
-
-                        val hpStat = details.stats.find { it.stat.name == "hp" }?.baseStat ?: 0
-                        val attackStat = details.stats.find { it.stat.name == "attack" }?.baseStat ?: 0
-                        val defenseStat = details.stats.find { it.stat.name == "defense" }?.baseStat ?: 0
-                        val spAtkStat = details.stats.find { it.stat.name == "sp-atk" }?.baseStat ?: 0
-                        val spDefStat = details.stats.find { it.stat.name == "sp-def" }?.baseStat ?: 0
-                        val speedStat = details.stats.find { it.stat.name == "speed" }?.baseStat ?: 0
-
-                        val gamePokemon = GamePokemon(
-                            pokemonId = details.id,
-                            name = result.name.replaceFirstChar { c -> c.uppercase() },
-                            imageUrl = imageUrl,
-                            types = types,
-                            hp = hpStat,
-                            attack = attackStat,
-                            defense = defenseStat,
-                            spAtk = spAtkStat,
-                            spDef = spDefStat,
-                            speed = speedStat
-                        )
-                        pokemonDataList.add(gamePokemon)
-                    } catch (e: Exception) {
-                        // Skip pokemon that fail to load
-                    }
-                    _loadingProgress.value = (index + 1).toFloat() / total.toFloat()
+                // Load Pokemon data from bundled JSON asset (instant, no network)
+                val pokemonDataList = withContext(Dispatchers.IO) {
+                    val jsonString = getApplication<Application>().assets
+                        .open("pokemon_gen1.json")
+                        .bufferedReader()
+                        .use { it.readText() }
+                    val listType = object : TypeToken<List<GamePokemon>>() {}.type
+                    gson.fromJson<List<GamePokemon>>(jsonString, listType)
                 }
 
                 _pokemonList.value = pokemonDataList
+
+                // Preload all images with Coil (cached on disk after first download)
+                val imageLoader = ImageLoader(getApplication())
+                val total = pokemonDataList.size
+                val completed = AtomicInteger(0)
+
+                val preloadJobs = pokemonDataList.map { pokemon ->
+                    async(Dispatchers.IO) {
+                        try {
+                            suspendCancellableCoroutine { cont ->
+                                val request = ImageRequest.Builder(getApplication())
+                                    .data(pokemon.imageUrl)
+                                    .size(512, 512)
+                                    .listener(
+                                        onSuccess = { _, _ -> cont.resume(Unit) },
+                                        onError = { _, _ -> cont.resume(Unit) }
+                                    )
+                                    .build()
+                                imageLoader.enqueue(request)
+                            }
+                        } catch (_: Exception) { }
+                        val done = completed.incrementAndGet()
+                        _loadingProgress.value = done.toFloat() / total.toFloat()
+                    }
+                }
+                preloadJobs.awaitAll()
+
                 _isLoading.value = false
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to load Pokemon: ${e.message}"
@@ -158,29 +164,18 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value
-            // Shuffling animation
-            repeat(20) {
-                _shuffleDisplayPokemon.value = allPokemon.random()
-                delay(100)
-            }
 
-            // Generate the actual board
+            // Generate board and start BT in background while animation plays
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
 
-            // Slow down reveal
-            repeat(8) {
-                _shuffleDisplayPokemon.value = board.random()
-                delay(150 + (it * 50L))
+            // Loading animation — cycle through random Pokemon at a readable pace
+            repeat(15) {
+                _shuffleDisplayPokemon.value = allPokemon.random()
+                delay(250)
             }
 
-            // Reveal your assigned pokemon
-            _shuffleDisplayPokemon.value = myPokemon
-            delay(800)
-
-            _isShuffling.value = false
-            _shuffleDisplayPokemon.value = null
-
+            // Set board data FIRST (so when isShuffling goes false, board is ready)
             _gameState.value = GameState(
                 board = board,
                 myPokemon = myPokemon,
@@ -193,6 +188,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             // Start Bluetooth server and wait for opponent
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
             startBluetoothServer()
+
+            // THEN clear shuffling — LaunchedEffect will see board + !isShuffling and navigate
+            _shuffleDisplayPokemon.value = null
+            _isShuffling.value = false
         }
     }
 
@@ -292,11 +291,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             viewModelScope.launch {
                 _isShuffling.value = true
 
-                repeat(15) {
-                    _shuffleDisplayPokemon.value = allPokemon.random()
-                    delay(100)
-                }
-
                 // Pick a pokemon that isn't the host's pokemon
                 val available = if (boardData.hostPokemonId > 0) {
                     board.filter { it.pokemonId != boardData.hostPokemonId }
@@ -305,17 +299,13 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 }
                 val myPokemon = available.random()
 
-                repeat(6) {
-                    _shuffleDisplayPokemon.value = board.random()
-                    delay(150 + (it * 50L))
+                // Loading animation at readable pace
+                repeat(12) {
+                    _shuffleDisplayPokemon.value = allPokemon.random()
+                    delay(250)
                 }
 
-                _shuffleDisplayPokemon.value = myPokemon
-                delay(800)
-
-                _isShuffling.value = false
-                _shuffleDisplayPokemon.value = null
-
+                // Set board FIRST, then clear shuffling
                 _gameState.value = GameState(
                     board = board,
                     myPokemon = myPokemon,
@@ -324,6 +314,9 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     isHost = false
                 )
                 saveGameState()
+
+                _shuffleDisplayPokemon.value = null
+                _isShuffling.value = false
             }
             true
         } catch (e: Exception) {

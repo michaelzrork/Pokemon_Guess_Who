@@ -25,19 +25,20 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     val navController = rememberNavController()
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
+    val isShuffling by viewModel.isShuffling.collectAsState()
 
-    // Auto-navigate to game when board is populated (from main menu or client lobby)
-    LaunchedEffect(lobbyState, gameState.board.size) {
+    // Auto-navigate to game when board is populated and loading animation is done
+    LaunchedEffect(lobbyState, gameState.board.size, isShuffling) {
         val currentRoute = navController.currentDestination?.route
         // Client lobby → game when connected and board ready
-        if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty() && currentRoute == Screen.ClientLobby.route) {
+        if (lobbyState == LobbyState.CONNECTED && gameState.board.isNotEmpty() && !isShuffling && currentRoute == Screen.ClientLobby.route) {
             navController.navigate(Screen.Game.route) {
                 popUpTo(Screen.MainMenu.route) { inclusive = false }
                 launchSingleTop = true
             }
         }
-        // Main menu → game when host board is ready (after shuffle completes)
-        if (gameState.board.isNotEmpty() && gameState.isHost && currentRoute == Screen.MainMenu.route) {
+        // Main menu → game when host board is ready AND loading animation is done
+        if (gameState.board.isNotEmpty() && gameState.isHost && !isShuffling && currentRoute == Screen.MainMenu.route) {
             navController.navigate(Screen.Game.route) {
                 launchSingleTop = true
             }
