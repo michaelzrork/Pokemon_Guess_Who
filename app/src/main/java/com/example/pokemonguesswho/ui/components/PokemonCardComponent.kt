@@ -187,7 +187,7 @@ fun StatBoxComponent(label: String, value: Int) {
     }
 }
 
-fun getTypeColorForBadge(type: String): Color {
+fun getTypeColor(type: String): Color {
     return when (type.lowercase()) {
         "normal" -> Color(0xFFA8A878)
         "fire" -> Color(0xFFF08030)

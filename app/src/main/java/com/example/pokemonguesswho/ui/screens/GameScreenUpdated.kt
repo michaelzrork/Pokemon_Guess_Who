@@ -1,5 +1,9 @@
 package com.example.pokemonguesswho.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,41 +12,43 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,73 +62,64 @@ import com.example.pokemonguesswho.ui.components.PokemonCardComponent
 @Composable
 fun GameScreenUpdated(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
-    val pokemonList by viewModel.pokemonList.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     val gameManager = GameManager()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
     ) {
-        if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Loading Pokemon...", style = MaterialTheme.typography.headlineSmall)
+        // Header with game controls
+        GameHeaderUpdated(
+            onToggleEliminated = { viewModel.toggleShowEliminated() },
+            showEliminated = gameState.showEliminated,
+            onShareBoard = {
+                val json = viewModel.exportBoardAsJson()
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Pokemon Board", json))
+                Toast.makeText(context, "Game code copied to clipboard!", Toast.LENGTH_SHORT).show()
+            },
+            gridColumns = gameState.gridColumns,
+            onZoomIn = {
+                val newCol = (gameState.gridColumns - 1).coerceIn(1, 6)
+                viewModel.setGridColumns(newCol)
+            },
+            onZoomOut = {
+                val newCol = (gameState.gridColumns + 1).coerceIn(1, 6)
+                viewModel.setGridColumns(newCol)
             }
-        } else if (errorMessage != null) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Error: ${errorMessage}", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else if (gameState.board.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(onClick = { viewModel.startNewGame() }) {
-                    Text("Start New Game")
-                }
-            }
-        } else {
-            // Header with game controls
-            GameHeaderUpdated(
-                onToggleEliminated = { viewModel.toggleShowEliminated() },
-                showEliminated = gameState.showEliminated
-            )
+        )
 
-            // Your assigned Pokemon banner
-            gameState.myPokemon?.let { myPoke ->
-                MyPokemonBanner(pokemon = myPoke)
-            }
-
-            // Main game board with pinch-to-zoom
-            PokemonGridUpdated(
-                pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
-                myPokemon = gameState.myPokemon,
-                onCardClick = { pokemon ->
-                    viewModel.togglePokemonElimination(pokemon)
-                },
-                gridColumns = gameState.gridColumns,
-                onGridColumnsChange = { viewModel.setGridColumns(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(8.dp)
-            )
+        // Your assigned Pokemon banner
+        gameState.myPokemon?.let { myPoke ->
+            MyPokemonBanner(pokemon = myPoke)
         }
+
+        // Main game board
+        PokemonGridUpdated(
+            pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
+            myPokemon = gameState.myPokemon,
+            onCardClick = { pokemon ->
+                viewModel.togglePokemonElimination(pokemon)
+            },
+            gridColumns = gameState.gridColumns,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(8.dp)
+        )
     }
 }
 
 @Composable
 fun GameHeaderUpdated(
     onToggleEliminated: () -> Unit,
-    showEliminated: Boolean
+    showEliminated: Boolean,
+    onShareBoard: () -> Unit,
+    gridColumns: Int,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -146,16 +143,16 @@ fun GameHeaderUpdated(
                 textAlign = TextAlign.Center
             )
 
-            // Control buttons
-            androidx.compose.foundation.layout.Row(
+            // Control buttons row
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Toggle eliminated cards
                 Button(
                     onClick = onToggleEliminated,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Icon(
                         imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
@@ -163,7 +160,63 @@ fun GameHeaderUpdated(
                         modifier = Modifier.padding(end = 4.dp),
                         tint = Color.White
                     )
-                    Text(if (showEliminated) "Hide X" else "Show X", fontSize = 12.sp)
+                    Text(if (showEliminated) "Hide X" else "Show X", fontSize = 11.sp)
+                }
+
+                // Zoom controls
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilledIconButton(
+                        onClick = onZoomOut,
+                        enabled = gridColumns < 6,
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Zoom Out",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        text = "${gridColumns}col",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    FilledIconButton(
+                        onClick = onZoomIn,
+                        enabled = gridColumns > 1,
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Zoom In",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Share board button
+                Button(
+                    onClick = onShareBoard,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share Board",
+                        modifier = Modifier.padding(end = 4.dp),
+                        tint = Color.White
+                    )
+                    Text("Share", fontSize = 11.sp)
                 }
             }
         }
@@ -218,43 +271,14 @@ fun PokemonGridUpdated(
     myPokemon: GamePokemon?,
     onCardClick: (GamePokemon) -> Unit,
     gridColumns: Int,
-    onGridColumnsChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Use mutable state so the gesture lambda always reads the latest value
-    var currentColumns by remember { mutableIntStateOf(gridColumns) }
-    currentColumns = gridColumns
-    var cumulativeScale by remember { mutableFloatStateOf(1f) }
-
     AnimatedContent(
         targetState = gridColumns,
         transitionSpec = {
             (fadeIn() + scaleIn(initialScale = 0.95f)) togetherWith (fadeOut() + scaleOut(targetScale = 0.95f))
         },
-        modifier = modifier
-            .pointerInput(Unit) {
-                detectTransformGestures { _, _, zoom, _ ->
-                    cumulativeScale *= zoom
-                    // Pinch out (spread fingers = zoom in) → fewer columns
-                    if (cumulativeScale > 1.3f) {
-                        val newColumns = (currentColumns - 1).coerceIn(1, 6)
-                        if (newColumns != currentColumns) {
-                            onGridColumnsChange(newColumns)
-                            currentColumns = newColumns
-                        }
-                        cumulativeScale = 1f
-                    }
-                    // Pinch in (squeeze fingers = zoom out) → more columns
-                    else if (cumulativeScale < 0.75f) {
-                        val newColumns = (currentColumns + 1).coerceIn(1, 6)
-                        if (newColumns != currentColumns) {
-                            onGridColumnsChange(newColumns)
-                            currentColumns = newColumns
-                        }
-                        cumulativeScale = 1f
-                    }
-                }
-            },
+        modifier = modifier,
         label = "GridLayoutTransition"
     ) { columns ->
         LazyVerticalGrid(

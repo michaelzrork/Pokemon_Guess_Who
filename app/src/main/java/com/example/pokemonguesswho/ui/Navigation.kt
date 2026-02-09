@@ -1,9 +1,9 @@
 package com.example.pokemonguesswho.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.navigation.NavController
-import androidx.navigation.NavGraphBuilder
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -19,6 +19,17 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(viewModel: PokemonViewModel) {
     val navController = rememberNavController()
+    val gameState by viewModel.gameState.collectAsState()
+
+    // Auto-navigate to game screen when board is populated
+    LaunchedEffect(gameState.board.size) {
+        if (gameState.board.isNotEmpty()) {
+            navController.navigate(Screen.Game.route) {
+                popUpTo(Screen.MainMenu.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -26,8 +37,9 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     ) {
         composable(Screen.MainMenu.route) {
             MainMenuScreen(
-                onStartGame = { navController.navigate(Screen.Game.route) },
-                onJoinGame = { navController.navigate(Screen.Game.route) }
+                viewModel = viewModel,
+                onStartGame = { /* handled by viewModel + LaunchedEffect */ },
+                onJoinGame = { /* handled by viewModel + LaunchedEffect */ }
             )
         }
         composable(Screen.Game.route) {

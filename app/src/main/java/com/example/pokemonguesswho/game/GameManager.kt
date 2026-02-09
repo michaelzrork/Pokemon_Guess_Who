@@ -35,10 +35,6 @@ class GameManager {
         }
     }
     
-    fun selectPokemon(pokemon: GamePokemon): GamePokemon {
-        return pokemon.copy()
-    }
-    
     fun getGridColumns(totalCards: Int): List<Int> {
         // Available column options based on card count
         val options = mutableListOf(1)

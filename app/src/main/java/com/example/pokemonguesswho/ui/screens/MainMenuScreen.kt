@@ -1,31 +1,65 @@
 package com.example.pokemonguesswho.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.pokemonguesswho.data.GamePokemon
+import com.example.pokemonguesswho.data.PokemonViewModel
 
 @Composable
 fun MainMenuScreen(
+    viewModel: PokemonViewModel,
     onStartGame: () -> Unit,
     onJoinGame: () -> Unit
 ) {
+    val isLoading by viewModel.isLoading.collectAsState()
+    val loadingProgress by viewModel.loadingProgress.collectAsState()
+    val isShuffling by viewModel.isShuffling.collectAsState()
+    val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    var showJoinDialog by remember { mutableStateOf(false) }
+    var joinCodeText by remember { mutableStateOf("") }
+    var joinError by remember { mutableStateOf<String?>(null) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -53,48 +87,222 @@ fun MainMenuScreen(
                 color = Color(0xFFFFEB3B)
             )
 
-            // Spacing
-            Box(modifier = Modifier.size(32.dp))
+            Box(modifier = Modifier.size(16.dp))
 
-            // Start a Game Button
-            Button(
-                onClick = onStartGame,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF3700B3)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    "Start a Game",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(12.dp),
-                    color = Color.White
-                )
-            }
+            when {
+                isLoading -> {
+                    // Loading state with progress
+                    Text(
+                        text = "Loading Pokemon...",
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = loadingProgress,
+                        animationSpec = tween(300),
+                        label = "progress"
+                    )
+                    LinearProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .padding(horizontal = 32.dp),
+                        color = Color(0xFFFFEB3B),
+                        trackColor = Color.White.copy(alpha = 0.3f),
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${(loadingProgress * 151).toInt()} / 151",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
 
-            // Join a Game Button
-            Button(
-                onClick = onJoinGame,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF03DAC5)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    "Join a Game",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(12.dp),
-                    color = Color.Black
-                )
+                isShuffling -> {
+                    // Shuffling animation
+                    ShufflingAnimation(pokemon = shuffleDisplayPokemon)
+                }
+
+                errorMessage != null -> {
+                    Text(
+                        text = errorMessage ?: "Unknown error",
+                        fontSize = 16.sp,
+                        color = Color.Red.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                else -> {
+                    // Buttons
+                    Box(modifier = Modifier.size(16.dp))
+
+                    if (!showJoinDialog) {
+                        // Start a Game Button
+                        Button(
+                            onClick = {
+                                viewModel.startNewGame()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF3700B3)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                "Start a Game",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(12.dp),
+                                color = Color.White
+                            )
+                        }
+
+                        // Join a Game Button
+                        Button(
+                            onClick = { showJoinDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF03DAC5)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                "Join a Game",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(12.dp),
+                                color = Color.Black
+                            )
+                        }
+                    } else {
+                        // Join game - paste code UI
+                        Text(
+                            text = "Paste the game code from the host:",
+                            fontSize = 16.sp,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = joinCodeText,
+                            onValueChange = {
+                                joinCodeText = it
+                                joinError = null
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            placeholder = { Text("Paste game code here...", color = Color.White.copy(alpha = 0.5f)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFFFFEB3B),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                                cursorColor = Color(0xFFFFEB3B)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        if (joinError != null) {
+                            Text(
+                                text = joinError!!,
+                                fontSize = 14.sp,
+                                color = Color.Red,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                val success = viewModel.joinGameFromJson(joinCodeText.trim())
+                                if (success) {
+                                    // Navigation will happen after shuffle animation
+                                } else {
+                                    joinError = "Invalid game code. Please try again."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF03DAC5)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = joinCodeText.isNotBlank()
+                        ) {
+                            Text(
+                                "Join",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(12.dp),
+                                color = Color.Black
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                showJoinDialog = false
+                                joinCodeText = ""
+                                joinError = null
+                            }
+                        ) {
+                            Text("Back", color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun ShufflingAnimation(pokemon: GamePokemon?) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.padding(24.dp)
+    ) {
+        Text(
+            text = "Shuffling...",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFFFEB3B)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        pokemon?.let { poke ->
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(animationSpec = tween(80)) + scaleIn(initialScale = 0.8f, animationSpec = tween(80)),
+                exit = fadeOut(animationSpec = tween(80)) + scaleOut(targetScale = 1.2f, animationSpec = tween(80))
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = poke.imageUrl,
+                        contentDescription = poke.name,
+                        modifier = Modifier
+                            .size(180.dp)
+                            .padding(8.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = poke.name,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        } ?: CircularProgressIndicator(color = Color(0xFFFFEB3B))
     }
 }
