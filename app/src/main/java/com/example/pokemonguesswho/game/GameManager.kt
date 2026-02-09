@@ -6,6 +6,7 @@ import kotlin.random.Random
 data class GameState(
     val board: List<GamePokemon> = emptyList(),
     val selectedPokemon: GamePokemon? = null,
+    val myPokemon: GamePokemon? = null,
     val showEliminated: Boolean = true,
     val gridColumns: Int = 3,
     val gameId: String = "",

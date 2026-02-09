@@ -83,16 +83,14 @@ class PokemonViewModel : ViewModel() {
     
     fun startNewGame() {
         val board = gameManager.generateGameBoard(_pokemonList.value)
+        val myPokemon = board.random()
         _gameState.value = GameState(
             board = board,
             selectedPokemon = null,
+            myPokemon = myPokemon,
             showEliminated = true,
             gridColumns = 3
         )
-    }
-    
-    fun selectPokemon(pokemon: GamePokemon) {
-        _gameState.value = _gameState.value.copy(selectedPokemon = pokemon)
     }
     
     fun togglePokemonElimination(pokemon: GamePokemon) {

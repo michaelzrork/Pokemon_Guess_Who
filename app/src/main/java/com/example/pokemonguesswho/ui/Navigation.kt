@@ -14,13 +14,12 @@ import com.example.pokemonguesswho.ui.screens.MainMenuScreen
 sealed class Screen(val route: String) {
     object MainMenu : Screen("main_menu")
     object Game : Screen("game")
-    object Multiplayer : Screen("multiplayer")
 }
 
 @Composable
 fun AppNavigation(viewModel: PokemonViewModel) {
     val navController = rememberNavController()
-    
+
     NavHost(
         navController = navController,
         startDestination = Screen.MainMenu.route
@@ -28,13 +27,10 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         composable(Screen.MainMenu.route) {
             MainMenuScreen(
                 onStartGame = { navController.navigate(Screen.Game.route) },
-                onMultiplayer = { navController.navigate(Screen.Multiplayer.route) }
+                onJoinGame = { navController.navigate(Screen.Game.route) }
             )
         }
         composable(Screen.Game.route) {
-            GameScreenUpdated(viewModel)
-        }
-        composable(Screen.Multiplayer.route) {
             GameScreenUpdated(viewModel)
         }
     }

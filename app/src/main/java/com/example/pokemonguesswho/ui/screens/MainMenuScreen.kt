@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun MainMenuScreen(
     onStartGame: () -> Unit,
-    onMultiplayer: () -> Unit
+    onJoinGame: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -52,11 +52,11 @@ fun MainMenuScreen(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFFFEB3B)
             )
-            
+
             // Spacing
             Box(modifier = Modifier.size(32.dp))
-            
-            // Start Game Button
+
+            // Start a Game Button
             Button(
                 onClick = onStartGame,
                 modifier = Modifier
@@ -68,17 +68,17 @@ fun MainMenuScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    "Single Player",
+                    "Start a Game",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(12.dp),
                     color = Color.White
                 )
             }
-            
-            // Multiplayer Button
+
+            // Join a Game Button
             Button(
-                onClick = onMultiplayer,
+                onClick = onJoinGame,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp),
@@ -88,7 +88,7 @@ fun MainMenuScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    "Multiplayer",
+                    "Join a Game",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(12.dp),
