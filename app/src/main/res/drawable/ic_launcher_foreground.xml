@@ -10,9 +10,9 @@
         android:fillColor="#E53935"
         android:pathData="M 0,0 L 108,0 L 108,54 L 0,54 Z" />
 
-    <!-- Yellow bottom half -->
+    <!-- White bottom half -->
     <path
-        android:fillColor="#FFEB3B"
+        android:fillColor="#FFFFFF"
         android:pathData="M 0,54 L 108,54 L 108,108 L 0,108 Z" />
 
     <!-- Black stripe -->
@@ -20,14 +20,14 @@
         android:fillColor="#000000"
         android:pathData="M 0,52 L 108,52 L 108,56 L 0,56 Z" />
 
-    <!-- White center circle -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 m -14,0 a 14,14 0 1,0 28,0 a 14,14 0 1,0 -28,0" />
-
-    <!-- Black inner circle -->
+    <!-- Black circle outline -->
     <path
         android:fillColor="#000000"
+        android:pathData="M 54,54 m -14,0 a 14,14 0 1,0 28,0 a 14,14 0 1,0 -28,0" />
+
+    <!-- White inner circle -->
+    <path
+        android:fillColor="#FFFFFF"
         android:pathData="M 54,54 m -10,0 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0" />
 </vector>
 
