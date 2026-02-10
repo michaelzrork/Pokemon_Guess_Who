@@ -1,5 +1,7 @@
 package com.example.pokemonguesswho.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -21,18 +23,20 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,128 +55,325 @@ fun PokemonCardComponent(
     val primaryType = pokemon.types.firstOrNull() ?: "Normal"
     val typeColor = getTypeColor(primaryType)
     val borderColor = if (isSelected) CustomColor.gold else typeColor
-    val eliminatedAlpha = if (pokemon.isEliminated) 0.4f else 1f
     val borderWidth = if (isSelected) 3.dp else 2.dp
+
+    // Animate rotation: 0 = front (normal), 180 = back (eliminated)
+    val rotation by animateFloatAsState(
+        targetValue = if (pokemon.isEliminated) 180f else 0f,
+        animationSpec = tween(durationMillis = 400),
+        label = "cardFlip"
+    )
+
+    // Determine which side is showing
+    val isFrontVisible = rotation < 90f
 
     Card(
         modifier = Modifier
             .aspectRatio(0.65f)
-            .alpha(eliminatedAlpha)
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 12f * density
+            }
             .clickable { onCardClick(pokemon) },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(width = borderWidth, color = borderColor),
+        border = BorderStroke(
+            width = if (isFrontVisible) borderWidth else 4.dp,
+            color = if (isFrontVisible) borderColor else Color.White
+        ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 2.dp
         ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // -- HEADER BAR: Name + HP --
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(typeColor.copy(alpha = 0.9f))
-                    .padding(horizontal = 6.dp, vertical = if (compact) 2.dp else 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = pokemon.name,
-                    fontSize = if (compact) 9.sp else 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CustomColor.white,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "${pokemon.hp} HP",
-                    fontSize = if (compact) 8.sp else 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CustomColor.white.copy(alpha = 0.9f)
-                )
-            }
-
-            // -- ART AREA --
+        if (isFrontVisible) {
+            // ===== FRONT SIDE =====
+            CardFrontContent(pokemon, typeColor, compact)
+        } else {
+            // ===== BACK SIDE (mirrored so it reads correctly when flipped) =====
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(
-                        typeColor.copy(alpha = 0.08f)
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .graphicsLayer { rotationY = 180f }
             ) {
-                AsyncImage(
-                    model = pokemon.imageUrl,
-                    contentDescription = pokemon.name,
-                    modifier = Modifier
-                        .fillMaxSize(0.85f),
-                    contentScale = ContentScale.Fit
-                )
-
-                // Elimination overlay
-                if (pokemon.isEliminated) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "X",
-                            fontSize = if (compact) 28.sp else 40.sp,
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
+                CardBackContent()
             }
+        }
+    }
+}
 
-            // -- TYPE ICONS + EVOLUTION STAGE ROW --
+@Composable
+private fun CardFrontContent(
+    pokemon: GamePokemon,
+    typeColor: Color,
+    compact: Boolean
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // -- HEADER BAR: Name + HP --
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(typeColor.copy(alpha = 0.9f))
+                .padding(horizontal = 6.dp, vertical = if (compact) 2.dp else 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = pokemon.name,
+                fontSize = if (compact) 9.sp else 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = CustomColor.white,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${pokemon.hp} HP",
+                fontSize = if (compact) 8.sp else 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = CustomColor.white.copy(alpha = 0.9f)
+            )
+        }
+
+        // -- ART AREA --
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(typeColor.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = pokemon.imageUrl,
+                contentDescription = pokemon.name,
+                modifier = Modifier.fillMaxSize(0.85f),
+                contentScale = ContentScale.Fit
+            )
+        }
+
+        // -- TYPE ICONS + EVOLUTION STAGE ROW --
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            pokemon.types.forEach { type ->
+                TypeIcon(
+                    type = type,
+                    size = if (compact) 16.dp else 24.dp
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Text(
+                text = pokemon.evolutionStage,
+                fontSize = if (compact) 7.sp else 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = getEvolutionStageColor(pokemon.evolutionStage),
+                modifier = Modifier
+                    .background(
+                        getEvolutionStageColor(pokemon.evolutionStage).copy(alpha = 0.12f),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            )
+        }
+
+        // -- STATS BAR (hidden in compact mode) --
+        if (!compact) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(typeColor.copy(alpha = 0.12f))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                pokemon.types.forEach { type ->
-                    TypeIcon(
-                        type = type,
-                        size = if (compact) 16.dp else 24.dp
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                // Evolution stage badge
-                Text(
-                    text = pokemon.evolutionStage,
-                    fontSize = if (compact) 7.sp else 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = getEvolutionStageColor(pokemon.evolutionStage),
-                    modifier = Modifier
-                        .background(
-                            getEvolutionStageColor(pokemon.evolutionStage).copy(alpha = 0.12f),
-                            RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                )
+                CompactStat("ATK", pokemon.attack)
+                CompactStat("DEF", pokemon.defense)
+                CompactStat("SPD", pokemon.speed)
             }
+        }
+    }
+}
 
-            // -- STATS BAR (hidden in compact mode) --
-            if (!compact) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(typeColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    CompactStat("ATK", pokemon.attack)
-                    CompactStat("DEF", pokemon.defense)
-                    CompactStat("SPD", pokemon.speed)
-                }
+@Composable
+private fun CardBackContent() {
+    // Official Pokemon card back colors
+    val pokemonCardBlue = Color(0xFF1A3A6B)
+    val pokemonCardBlueDark = Color(0xFF0F2444)
+    val pokemonCardBlueLight = Color(0xFF2B5EA6)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(pokemonCardBlueLight, pokemonCardBlue, pokemonCardBlueDark),
+                    radius = 600f
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Textured pattern overlay - subtle diagonal lines
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val lineSpacing = 8.dp.toPx()
+            val lineColor = Color.White.copy(alpha = 0.04f)
+            val strokeW = 1.dp.toPx()
+
+            // Diagonal lines going one way
+            var x = -size.height
+            while (x < size.width + size.height) {
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x + size.height, size.height),
+                    strokeWidth = strokeW
+                )
+                x += lineSpacing
             }
+            // Diagonal lines going the other way
+            x = -size.height
+            while (x < size.width + size.height) {
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, size.height),
+                    end = Offset(x + size.height, 0f),
+                    strokeWidth = strokeW
+                )
+                x += lineSpacing
+            }
+        }
+
+        // Inner decorative border
+        Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+            val borderColor = Color.White.copy(alpha = 0.15f)
+            val rect = Rect(0f, 0f, size.width, size.height)
+            val cornerRadius = 4.dp.toPx()
+
+            // Draw inner rounded rectangle border
+            drawRoundRect(
+                color = borderColor,
+                topLeft = Offset(rect.left, rect.top),
+                size = androidx.compose.ui.geometry.Size(rect.width, rect.height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadius, cornerRadius),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+        }
+
+        // Pokeball - drawn via Canvas, matching the app icon style
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize(0.55f)
+                .aspectRatio(1f)
+        ) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val radius = size.minDimension / 2f
+
+            val pokeRed = Color(0xFFFD0000)
+            val pokeWhite = Color(0xFFFFFFFF)
+            val pokeBlack = Color(0xFF1A1A1A)
+            val pokeGrayLight = Color(0xFFE8E8E8)
+            val stripeHeight = radius * 0.13f
+            val buttonOuterR = radius * 0.28f
+            val buttonInnerR = radius * 0.18f
+
+            // Shadow behind pokeball
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.3f),
+                radius = radius * 1.02f,
+                center = Offset(cx + 2.dp.toPx(), cy + 2.dp.toPx())
+            )
+
+            // Black outline circle
+            drawCircle(
+                color = pokeBlack,
+                radius = radius,
+                center = Offset(cx, cy)
+            )
+
+            // Red top semicircle
+            val topHalf = Path().apply {
+                addArc(
+                    Rect(cx - radius * 0.92f, cy - radius * 0.92f, cx + radius * 0.92f, cy + radius * 0.92f),
+                    180f, 180f
+                )
+                close()
+            }
+            drawPath(topHalf, pokeRed)
+
+            // Subtle gradient highlight on top half
+            val topHighlight = Path().apply {
+                addArc(
+                    Rect(cx - radius * 0.92f, cy - radius * 0.92f, cx + radius * 0.92f, cy + radius * 0.92f),
+                    180f, 180f
+                )
+                close()
+            }
+            drawPath(
+                topHighlight,
+                Brush.verticalGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.25f), Color.Transparent),
+                    startY = cy - radius * 0.92f,
+                    endY = cy
+                )
+            )
+
+            // White bottom semicircle
+            val bottomHalf = Path().apply {
+                addArc(
+                    Rect(cx - radius * 0.92f, cy - radius * 0.92f, cx + radius * 0.92f, cy + radius * 0.92f),
+                    0f, 180f
+                )
+                close()
+            }
+            drawPath(bottomHalf, pokeWhite)
+
+            // Subtle shadow on bottom half
+            drawPath(
+                bottomHalf,
+                Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.08f)),
+                    startY = cy,
+                    endY = cy + radius * 0.92f
+                )
+            )
+
+            // Center stripe (black band)
+            drawRect(
+                color = pokeBlack,
+                topLeft = Offset(cx - radius, cy - stripeHeight),
+                size = androidx.compose.ui.geometry.Size(radius * 2, stripeHeight * 2)
+            )
+
+            // Center button - outer black ring
+            drawCircle(
+                color = pokeBlack,
+                radius = buttonOuterR,
+                center = Offset(cx, cy)
+            )
+
+            // Center button - white fill
+            drawCircle(
+                color = pokeWhite,
+                radius = buttonInnerR,
+                center = Offset(cx, cy)
+            )
+
+            // Center button - subtle inner shadow ring
+            drawCircle(
+                color = pokeGrayLight,
+                radius = buttonInnerR,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+
+            // Glossy highlight on button
+            drawCircle(
+                color = Color.White.copy(alpha = 0.6f),
+                radius = buttonInnerR * 0.35f,
+                center = Offset(cx - buttonInnerR * 0.2f, cy - buttonInnerR * 0.2f)
+            )
         }
     }
 }
