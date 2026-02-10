@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.pokemonguesswho.data.GamePokemon
+import com.example.pokemonguesswho.ui.CustomColor
 
 @Composable
 fun PokemonCardComponent(
@@ -48,7 +50,7 @@ fun PokemonCardComponent(
 ) {
     val primaryType = pokemon.types.firstOrNull() ?: "Normal"
     val typeColor = getTypeColor(primaryType)
-    val borderColor = if (isSelected) Color(0xFFFFD700) else typeColor
+    val borderColor = if (isSelected) CustomColor.gold else typeColor
     val eliminatedAlpha = if (pokemon.isEliminated) 0.4f else 1f
     val borderWidth = if (isSelected) 3.dp else 2.dp
 
@@ -62,7 +64,7 @@ fun PokemonCardComponent(
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 2.dp
         ),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // -- HEADER BAR: Name + HP --
@@ -78,7 +80,7 @@ fun PokemonCardComponent(
                     text = pokemon.name,
                     fontSize = if (compact) 9.sp else 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = CustomColor.white,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -87,7 +89,7 @@ fun PokemonCardComponent(
                     text = "${pokemon.hp} HP",
                     fontSize = if (compact) 8.sp else 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = CustomColor.white.copy(alpha = 0.9f)
                 )
             }
 
@@ -114,13 +116,13 @@ fun PokemonCardComponent(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Red.copy(alpha = 0.25f)),
+                            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "X",
                             fontSize = if (compact) 28.sp else 40.sp,
-                            color = Color.Red.copy(alpha = 0.8f),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
@@ -184,7 +186,7 @@ private fun CompactStat(label: String, value: Int) {
         Text(
             text = label,
             fontSize = 7.sp,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Bold,
             lineHeight = 8.sp
         )
@@ -192,7 +194,7 @@ private fun CompactStat(label: String, value: Int) {
             text = value.toString(),
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.DarkGray,
+            color = MaterialTheme.colorScheme.onSurface,
             lineHeight = 10.sp
         )
     }
@@ -207,6 +209,8 @@ fun TypeIcon(type: String, size: Dp = 18.dp) {
     val typeColor = getTypeColor(type)
     val symbol = getTypeSymbol(type)
 
+    val white = CustomColor.white
+
     Box(
         contentAlignment = Alignment.Center
     ) {
@@ -218,21 +222,21 @@ fun TypeIcon(type: String, size: Dp = 18.dp) {
             )
             // Thin border
             drawCircle(
-                color = Color.White.copy(alpha = 0.4f),
+                color = white.copy(alpha = 0.4f),
                 radius = this.size.minDimension / 2f,
                 style = Stroke(width = 1.dp.toPx())
             )
             // Draw the type symbol
-            drawTypeSymbol(symbol, typeColor)
+            drawTypeSymbol(symbol, typeColor, white)
         }
     }
 }
 
-private fun DrawScope.drawTypeSymbol(symbol: TypeSymbol, typeColor: Color) {
+private fun DrawScope.drawTypeSymbol(symbol: TypeSymbol, typeColor: Color, white: Color) {
     val cx = size.width / 2f
     val cy = size.height / 2f
     val r = size.minDimension / 2f
-    val symbolColor = Color.White.copy(alpha = 0.9f)
+    val symbolColor = white.copy(alpha = 0.9f)
 
     when (symbol) {
         TypeSymbol.FLAME -> {
@@ -408,36 +412,38 @@ private fun getTypeSymbol(type: String): TypeSymbol {
     }
 }
 
+@Composable
 fun getTypeColor(type: String): Color {
     return when (type.lowercase()) {
-        "normal" -> Color(0xFFA8A878)
-        "fire" -> Color(0xFFF08030)
-        "water" -> Color(0xFF6890F0)
-        "electric" -> Color(0xFFF8D030)
-        "grass" -> Color(0xFF78C850)
-        "ice" -> Color(0xFF98D8D8)
-        "fighting" -> Color(0xFFC03028)
-        "poison" -> Color(0xFFA040A0)
-        "ground" -> Color(0xFFE0C068)
-        "flying" -> Color(0xFFA890F0)
-        "psychic" -> Color(0xFFF85888)
-        "bug" -> Color(0xFFA8B820)
-        "rock" -> Color(0xFFB8A038)
-        "ghost" -> Color(0xFF705898)
-        "dragon" -> Color(0xFF7038F8)
-        "dark" -> Color(0xFF705848)
-        "steel" -> Color(0xFFB8B8D0)
-        "fairy" -> Color(0xFFEE99AC)
-        else -> Color(0xFF68A090)
+        "normal" -> CustomColor.typeNormal
+        "fire" -> CustomColor.typeFire
+        "water" -> CustomColor.typeWater
+        "electric" -> CustomColor.typeElectric
+        "grass" -> CustomColor.typeGrass
+        "ice" -> CustomColor.typeIce
+        "fighting" -> CustomColor.typeFighting
+        "poison" -> CustomColor.typePoison
+        "ground" -> CustomColor.typeGround
+        "flying" -> CustomColor.typeFlying
+        "psychic" -> CustomColor.typePsychic
+        "bug" -> CustomColor.typeBug
+        "rock" -> CustomColor.typeRock
+        "ghost" -> CustomColor.typeGhost
+        "dragon" -> CustomColor.typeDragon
+        "dark" -> CustomColor.typeDark
+        "steel" -> CustomColor.typeSteel
+        "fairy" -> CustomColor.typeFairy
+        else -> CustomColor.typeUnknown
     }
 }
 
+@Composable
 fun getEvolutionStageColor(stage: String): Color {
     return when (stage) {
-        "Basic" -> Color(0xFF78C850)      // Green
-        "Stage 1" -> Color(0xFF6890F0)    // Blue
-        "Stage 2" -> Color(0xFFF08030)    // Orange
-        "Legendary" -> Color(0xFFFFD700)  // Gold
-        else -> Color(0xFFA8A878)         // Gray
+        "Basic" -> CustomColor.typeGrass
+        "Stage 1" -> CustomColor.typeWater
+        "Stage 2" -> CustomColor.typeFire
+        "Legendary" -> CustomColor.gold
+        else -> CustomColor.typeNormal
     }
 }

@@ -11,37 +11,37 @@
     <!-- Black circle outline (slightly larger) -->
     <path
         android:fillColor="#000000"
-        android:pathData="M 54,54 m -32,0 a 32,32 0 1,0 64,0 a 32,32 0 1,0 -64,0" />
+        android:pathData="M 54,54 m -30,0 a 30,30 0 1,0 60,0 a 30,30 0 1,0 -60,0" />
 
     <!-- Red top half (semicircle) -->
     <path
-        android:fillColor="#E53935"
-        android:pathData="M 22,54 A 32,32 0 0,1 86,54 Z" />
+        android:fillColor="@color/pokemon_red"
+        android:pathData="M 27,54 A 27,27 0 0,1 81,54 Z" />
 
     <!-- White bottom half (semicircle) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 22,54 A 32,32 0 0,0 86,54 Z" />
+        android:fillColor="@color/white"
+        android:pathData="M 27,54 A 27,27 0 0,0 81,54 Z" />
 
     <!-- Black center stripe -->
     <path
-        android:fillColor="#000000"
-        android:pathData="M 22,51.5 L 86,51.5 L 86,56.5 L 22,56.5 Z" />
+        android:fillColor="@color/black"
+        android:pathData="M 24,51.5 L 84,51.5 L 84,56.5 L 24,56.5 Z" />
 
     <!-- Black outer ring of center button -->
     <path
-        android:fillColor="#000000"
+        android:fillColor="@color/black"
         android:pathData="M 54,54 m -11,0 a 11,11 0 1,0 22,0 a 11,11 0 1,0 -22,0" />
 
     <!-- White inner circle of center button -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="@color/white"
         android:pathData="M 54,54 m -7,0 a 7,7 0 1,0 14,0 a 7,7 0 1,0 -14,0" />
 
     <!-- Black inner ring of center button -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="@color/white"
         android:pathData="M 54,54 m -7,0 a 7,7 0 1,0 14,0 a 7,7 0 1,0 -14,0"
-        android:strokeWidth="1.5"
-        android:strokeColor="#FFFFFF" />
+        android:strokeWidth="2"
+        android:strokeColor="@color/white_shadow" />
 </vector>

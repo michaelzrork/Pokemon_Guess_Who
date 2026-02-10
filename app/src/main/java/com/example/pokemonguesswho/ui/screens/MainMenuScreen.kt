@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.pokemonguesswho.data.GamePokemon
 import com.example.pokemonguesswho.data.PokemonViewModel
+import com.example.pokemonguesswho.ui.CustomColor
 
 @Composable
 fun MainMenuScreen(
@@ -62,7 +64,7 @@ fun MainMenuScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = Color(0xFF6200EE))
+            .background(color = MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -79,7 +81,7 @@ fun MainMenuScreen(
                     Text(
                         text = "Loading Pokemon...",
                         fontSize = 16.sp,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     val animatedProgress by animateFloatAsState(
@@ -93,14 +95,14 @@ fun MainMenuScreen(
                             .fillMaxWidth()
                             .height(8.dp)
                             .padding(horizontal = 32.dp),
-                        color = Color(0xFFFFEB3B),
-                        trackColor = Color.White.copy(alpha = 0.3f),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f),
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "${(loadingProgress * 151).toInt()} / 151",
                         fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
                 }
 
@@ -108,7 +110,7 @@ fun MainMenuScreen(
                     Text(
                         text = errorMessage ?: "Unknown error",
                         fontSize = 16.sp,
-                        color = Color.Red.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -132,7 +134,7 @@ fun MainMenuScreen(
                                 .fillMaxWidth()
                                 .padding(vertical = 12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFFEB3B)
+                                containerColor = MaterialTheme.colorScheme.tertiary
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -141,7 +143,7 @@ fun MainMenuScreen(
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(12.dp),
-                                color = Color.Black
+                                color = MaterialTheme.colorScheme.onTertiary
                             )
                         }
                     }
@@ -153,7 +155,7 @@ fun MainMenuScreen(
                             .fillMaxWidth()
                             .padding(vertical = 12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF3700B3)
+                            containerColor = MaterialTheme.colorScheme.primary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -162,7 +164,7 @@ fun MainMenuScreen(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(12.dp),
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
 
@@ -173,7 +175,7 @@ fun MainMenuScreen(
                             .fillMaxWidth()
                             .padding(vertical = 12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF03DAC5)
+                            containerColor = MaterialTheme.colorScheme.secondary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -182,7 +184,7 @@ fun MainMenuScreen(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(12.dp),
-                            color = Color.Black
+                            color = MaterialTheme.colorScheme.onSecondary
                         )
                     }
                 }
@@ -202,7 +204,7 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
             text = "Loading...",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFFEB3B)
+            color = MaterialTheme.colorScheme.onBackground
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -228,16 +230,20 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
                         text = poke.name,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
-        } ?: CircularProgressIndicator(color = Color(0xFFFFEB3B))
+        } ?: CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
     }
 }
 
 @Composable
 fun PokeballIcon(modifier: Modifier = Modifier) {
+    val charcoalColor = CustomColor.charcoal
+    val pokeballRedColor = CustomColor.pokeballRed
+    val whiteColor = CustomColor.white
+
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -249,14 +255,14 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Outer circle - dark outline
         drawCircle(
-            color = Color(0xFF2D2D2D),
+            color = charcoalColor,
             radius = radius,
             style = Fill
         )
 
         // Top half - red
         drawArc(
-            color = Color(0xFFFF1C1C),
+            color = pokeballRedColor,
             startAngle = 180f,
             sweepAngle = 180f,
             useCenter = true,
@@ -265,7 +271,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Bottom half - white
         drawArc(
-            color = Color.White,
+            color = whiteColor,
             startAngle = 0f,
             sweepAngle = 180f,
             useCenter = true,
@@ -274,7 +280,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Center band - dark
         drawLine(
-            color = Color(0xFF2D2D2D),
+            color = charcoalColor,
             start = Offset(0f, cy),
             end = Offset(w, cy),
             strokeWidth = bandHeight,
@@ -283,14 +289,14 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Outer ring
         drawCircle(
-            color = Color(0xFF2D2D2D),
+            color = charcoalColor,
             radius = radius,
             style = Stroke(width = strokeWidth)
         )
 
         // Center button - outer ring
         drawCircle(
-            color = Color(0xFF2D2D2D),
+            color = charcoalColor,
             radius = radius * 0.22f,
             center = Offset(cx, cy),
             style = Fill
@@ -298,7 +304,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Center button - white fill
         drawCircle(
-            color = Color.White,
+            color = whiteColor,
             radius = radius * 0.15f,
             center = Offset(cx, cy),
             style = Fill
@@ -306,7 +312,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Center button - inner ring
         drawCircle(
-            color = Color(0xFF2D2D2D),
+            color = charcoalColor,
             radius = radius * 0.15f,
             center = Offset(cx, cy),
             style = Stroke(width = strokeWidth * 0.6f)
@@ -314,7 +320,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
 
         // Highlight on top-left for 3D effect
         drawCircle(
-            color = Color.White.copy(alpha = 0.25f),
+            color = whiteColor.copy(alpha = 0.25f),
             radius = radius * 0.35f,
             center = Offset(cx - radius * 0.2f, cy - radius * 0.35f),
             style = Fill
@@ -334,9 +340,9 @@ fun GameLogo() {
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 6.sp,
-                color = Color(0xFFFFEB3B),
+                color = CustomColor.yellowAccent,
                 shadow = Shadow(
-                    color = Color(0xFF3700B3),
+                    color = CustomColor.purple700,
                     offset = Offset(2f, 2f),
                     blurRadius = 4f
                 )
@@ -351,13 +357,13 @@ fun GameLogo() {
                 letterSpacing = 3.sp,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFFFFEB3B),
-                        Color(0xFFFFC107),
-                        Color(0xFFFF9800)
+                        CustomColor.yellowAccent,
+                        CustomColor.amber,
+                        CustomColor.orange
                     )
                 ),
                 shadow = Shadow(
-                    color = Color.Black.copy(alpha = 0.5f),
+                    color = CustomColor.black.copy(alpha = 0.5f),
                     offset = Offset(3f, 3f),
                     blurRadius = 6f
                 )
@@ -368,7 +374,7 @@ fun GameLogo() {
             text = "Gotta Guess 'Em All!",
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             letterSpacing = 2.sp
         )
     }

@@ -53,6 +53,7 @@ import com.example.pokemonguesswho.data.GamePokemon
 import com.example.pokemonguesswho.data.LobbyState
 import com.example.pokemonguesswho.data.PokemonViewModel
 import com.example.pokemonguesswho.game.GameManager
+import com.example.pokemonguesswho.ui.CustomColor
 import com.example.pokemonguesswho.ui.components.PokemonCardComponent
 import com.example.pokemonguesswho.ui.components.TypeIcon
 import com.example.pokemonguesswho.ui.components.getTypeColor
@@ -71,7 +72,7 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF6200EE)),
+                .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
             ShufflingAnimation(pokemon = shuffleDisplayPokemon)
@@ -83,7 +84,7 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF5F5F5))
+                .background(MaterialTheme.colorScheme.background)
         ) {
             // Waiting for player status bar (host only, before opponent connects)
             if (gameState.isHost && lobbyState == LobbyState.WAITING_FOR_OPPONENT) {
@@ -130,26 +131,26 @@ fun WaitingForPlayerBar() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF6200EE))
+            .background(MaterialTheme.colorScheme.primary)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         CircularProgressIndicator(
-            color = Color(0xFFFFEB3B),
+            color = MaterialTheme.colorScheme.tertiary,
             modifier = Modifier.size(16.dp),
             strokeWidth = 2.dp
         )
         Icon(
             imageVector = Icons.Default.Bluetooth,
             contentDescription = null,
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(16.dp)
         )
         Text(
             text = "Waiting for opponent to join...",
             fontSize = 13.sp,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onPrimary,
             fontWeight = FontWeight.Medium
         )
     }
@@ -162,7 +163,7 @@ fun OpponentFoundBanner(message: String) {
             .fillMaxWidth()
             .padding(12.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+        colors = CardDefaults.cardColors(containerColor = CustomColor.greenSuccess),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Row(
@@ -175,14 +176,14 @@ fun OpponentFoundBanner(message: String) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,
-                tint = Color.White,
+                tint = CustomColor.white,
                 modifier = Modifier.size(24.dp)
             )
             Text(
                 text = message,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = CustomColor.white
             )
         }
     }
@@ -199,7 +200,7 @@ fun MyPokemonTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF6200EE))
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Top
@@ -212,7 +213,7 @@ fun MyPokemonTopBar(
                 text = "YOUR POKEMON",
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFFFD700),
+                color = MaterialTheme.colorScheme.onBackground,
                 letterSpacing = 1.sp
             )
             Spacer(modifier = Modifier.height(3.dp))
@@ -243,15 +244,15 @@ fun MyPokemonTopBar(
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = if (showEliminated)
-                            Color.White.copy(alpha = 0.2f)
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
                         else
-                            Color.White.copy(alpha = 0.35f)
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
                     )
                 ) {
                     Icon(
                         imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -261,13 +262,13 @@ fun MyPokemonTopBar(
                     modifier = Modifier.size(30.dp),
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color(0xFFE53935)
+                        containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "End Game",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onError,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -278,7 +279,7 @@ fun MyPokemonTopBar(
                 text = "TYPE GLOSSARY",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFFFD700),
+                color = MaterialTheme.colorScheme.onBackground,
                 letterSpacing = 1.sp
             )
             // 4 rows of 4 types each
@@ -318,7 +319,7 @@ private fun TypeGlossaryChip(type: String, modifier: Modifier = Modifier) {
             text = type,
             fontSize = 8.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White.copy(alpha = 0.85f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
             maxLines = 1
         )
     }
@@ -362,13 +363,13 @@ private fun StatChip(label: String, value: Int) {
             text = label,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value.toString(),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.DarkGray
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
