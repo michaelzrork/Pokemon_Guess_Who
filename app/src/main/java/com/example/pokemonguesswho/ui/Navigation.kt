@@ -96,16 +96,20 @@ fun AppNavigation(viewModel: PokemonViewModel) {
                 }
             }
 
-            // Back press goes to main menu without losing game state (it's saved)
+            // Back press triggers exit confirmation instead of immediately leaving
             BackHandler {
-                navController.popBackStack(Screen.MainMenu.route, inclusive = false)
+                viewModel.showExitConfirmation()
             }
 
             GameScreenUpdated(
                 viewModel = viewModel,
-                onEndGame = {
+                onConfirmExit = {
+                    viewModel.dismissExitConfirmation()
                     viewModel.endGame()
                     navController.popBackStack(Screen.MainMenu.route, inclusive = false)
+                },
+                onDismissExit = {
+                    viewModel.dismissExitConfirmation()
                 }
             )
         }

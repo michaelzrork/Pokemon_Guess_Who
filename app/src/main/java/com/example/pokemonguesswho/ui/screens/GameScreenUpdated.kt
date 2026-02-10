@@ -29,9 +29,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -59,14 +60,52 @@ import com.example.pokemonguesswho.ui.components.TypeIcon
 import com.example.pokemonguesswho.ui.components.getTypeColor
 
 @Composable
-fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
+fun GameScreenUpdated(
+    viewModel: PokemonViewModel,
+    onConfirmExit: () -> Unit = {},
+    onDismissExit: () -> Unit = {}
+) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val opponentFoundMessage by viewModel.opponentFoundMessage.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val showExitDialog by viewModel.showExitDialog.collectAsState()
     val gameManager = GameManager()
+
+    // Exit confirmation dialog
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissExit,
+            title = {
+                Text(
+                    text = "Leave Game?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text("Are you sure you'd like to exit your game?")
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmExit) {
+                    Text(
+                        "Yes",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissExit) {
+                    Text(
+                        "No",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        )
+    }
 
     // Show loading animation while shuffling (host navigates here immediately)
     if (isShuffling) {
@@ -106,13 +145,12 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
                 WaitingForPlayerBar()
             }
 
-            // Top bar: My Pokemon card (compact) + Hide/Show toggle + End Game
+            // Top bar: My Pokemon card + Hide/Show toggle + Type Glossary
             gameState.myPokemon?.let { myPoke ->
                 MyPokemonTopBar(
                     pokemon = myPoke,
                     showEliminated = gameState.showEliminated,
-                    onToggleEliminated = { viewModel.toggleShowEliminated() },
-                    onEndGame = onEndGame
+                    onToggleEliminated = { viewModel.toggleShowEliminated() }
                 )
             }
 
@@ -209,8 +247,7 @@ fun OpponentFoundBanner(message: String) {
 fun MyPokemonTopBar(
     pokemon: GamePokemon,
     showEliminated: Boolean,
-    onToggleEliminated: () -> Unit,
-    onEndGame: () -> Unit = {}
+    onToggleEliminated: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -220,10 +257,11 @@ fun MyPokemonTopBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Your Pokemon card — same as board cards, with gold border + label
+        // Your Pokemon card — full-sized, matching grid cards, with gold border + label
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // "YOUR POKEMON" label row — shared with Type Glossary label via the parent Row alignment
             Text(
                 text = "YOUR POKEMON",
                 fontSize = 9.sp,
@@ -232,7 +270,7 @@ fun MyPokemonTopBar(
                 letterSpacing = 1.sp
             )
             Spacer(modifier = Modifier.height(3.dp))
-            Box(modifier = Modifier.width(110.dp)) {
+            Box(modifier = Modifier.width(120.dp)) {
                 PokemonCardComponent(
                     pokemon = pokemon,
                     onCardClick = { },
@@ -242,17 +280,25 @@ fun MyPokemonTopBar(
             }
         }
 
-        // Type glossary + action buttons
+        // Type glossary + visibility toggle
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Action buttons row
+            // Label row: "TYPE GLOSSARY" on left, visibility toggle on right
+            // This row aligns with "YOUR POKEMON" label since both columns start at Alignment.Top
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = "TYPE GLOSSARY",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    letterSpacing = 1.sp
+                )
                 FilledIconButton(
                     onClick = onToggleEliminated,
                     modifier = Modifier.size(30.dp),
@@ -271,33 +317,9 @@ fun MyPokemonTopBar(
                         modifier = Modifier.size(14.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                FilledIconButton(
-                    onClick = onEndGame,
-                    modifier = Modifier.size(30.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "End Game",
-                        tint = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
             }
 
-            // Type glossary — 4x4 grid
-            Text(
-                text = "TYPE GLOSSARY",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                letterSpacing = 1.sp
-            )
-            // 4 rows of 4 types each
+            // 4 rows of 4 types each — starts right below the label row, aligning with top of card
             allPokemonTypes.chunked(4).forEach { rowTypes ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),

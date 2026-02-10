@@ -94,6 +94,18 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     private val _opponentFoundMessage = MutableStateFlow<String?>(null)
     val opponentFoundMessage: StateFlow<String?> = _opponentFoundMessage.asStateFlow()
 
+    // Exit confirmation dialog state
+    private val _showExitDialog = MutableStateFlow(false)
+    val showExitDialog: StateFlow<Boolean> = _showExitDialog.asStateFlow()
+
+    fun showExitConfirmation() {
+        _showExitDialog.value = true
+    }
+
+    fun dismissExitConfirmation() {
+        _showExitDialog.value = false
+    }
+
     // Gen 1 Pokemon (IDs 1-151) used for shuffle animation visuals
     private var gen1Pokemon: List<GamePokemon> = emptyList()
     private val imageLoader = ImageLoader(application)
