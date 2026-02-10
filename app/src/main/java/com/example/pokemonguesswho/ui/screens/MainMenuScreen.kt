@@ -53,13 +53,11 @@ import com.example.pokemonguesswho.ui.CustomColor
 fun MainMenuScreen(
     viewModel: PokemonViewModel,
     onStartGame: () -> Unit,
-    onJoinGame: () -> Unit,
-    onResumeGame: () -> Unit = {}
+    onJoinGame: () -> Unit
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val loadingProgress by viewModel.loadingProgress.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val hasSavedGame = viewModel.hasSavedGame()
 
     Box(
         modifier = Modifier
@@ -125,28 +123,6 @@ fun MainMenuScreen(
                     GameLogo()
 
                     Spacer(modifier = Modifier.height(32.dp))
-
-                    // Resume Game Button (only shown if there's a saved game)
-                    if (hasSavedGame) {
-                        Button(
-                            onClick = onResumeGame,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiary
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                "Resume Game",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(12.dp),
-                                color = MaterialTheme.colorScheme.onTertiary
-                            )
-                        }
-                    }
 
                     // Start a Game Button
                     Button(

@@ -1,7 +1,6 @@
 package com.example.pokemonguesswho.data
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
@@ -30,14 +29,6 @@ data class BoardData(
     val hostPokemonId: Int = -1
 )
 
-data class SavedGameData(
-    val boardPokemonIds: List<Int>,
-    val eliminatedIds: List<Int>,
-    val myPokemonId: Int,
-    val showEliminated: Boolean,
-    val isHost: Boolean
-)
-
 enum class LobbyState {
     IDLE,
     WAITING_FOR_OPPONENT,
@@ -53,7 +44,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     private val gameManager = GameManager()
     private val gson = Gson()
     val bluetoothManager = BluetoothConnectionManager(application.applicationContext)
-    private val prefs = application.getSharedPreferences("pokemon_game", Context.MODE_PRIVATE)
 
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -219,7 +209,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 showEliminated = true,
                 isHost = true
             )
-            saveGameState()
             _isShuffling.value = false
 
             // Start Bluetooth server for opponent to join
@@ -352,7 +341,6 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     showEliminated = true,
                     isHost = false
                 )
-                saveGameState()
 
                 _shuffleDisplayPokemon.value = null
                 _isShuffling.value = false
@@ -369,14 +357,12 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             if (it.pokemonId == pokemon.pokemonId) updated else it
         }
         _gameState.value = _gameState.value.copy(board = newBoard)
-        saveGameState()
     }
 
     fun toggleShowEliminated() {
         _gameState.value = _gameState.value.copy(
             showEliminated = !_gameState.value.showEliminated
         )
-        saveGameState()
     }
 
     fun resetLobby() {
@@ -384,61 +370,7 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         _lobbyState.value = LobbyState.IDLE
     }
 
-    // ---- GAME PERSISTENCE ----
-
-    fun hasSavedGame(): Boolean {
-        return prefs.contains("saved_game")
-    }
-
-    private fun saveGameState() {
-        val state = _gameState.value
-        if (state.board.isEmpty() || state.myPokemon == null) return
-
-        val savedData = SavedGameData(
-            boardPokemonIds = state.board.map { it.pokemonId },
-            eliminatedIds = state.board.filter { it.isEliminated }.map { it.pokemonId },
-            myPokemonId = state.myPokemon.pokemonId,
-            showEliminated = state.showEliminated,
-            isHost = state.isHost
-        )
-        prefs.edit().putString("saved_game", gson.toJson(savedData)).apply()
-    }
-
-    fun restoreSavedGame(): Boolean {
-        val json = prefs.getString("saved_game", null) ?: return false
-        val allPokemon = _pokemonList.value
-        if (allPokemon.isEmpty()) return false
-
-        return try {
-            val savedData = gson.fromJson(json, SavedGameData::class.java)
-            val pokemonMap = allPokemon.associateBy { it.pokemonId }
-            val eliminatedSet = savedData.eliminatedIds.toSet()
-
-            val board = savedData.boardPokemonIds.mapNotNull { id ->
-                pokemonMap[id]?.copy(isEliminated = id in eliminatedSet)
-            }
-            val myPokemon = pokemonMap[savedData.myPokemonId]
-
-            if (board.size < 2 || myPokemon == null) return false
-
-            // Preload board images in background (may include non-Gen1 Pokemon)
-            viewModelScope.launch { preloadBoardImages(board) }
-
-            _gameState.value = GameState(
-                board = board,
-                myPokemon = myPokemon,
-                showEliminated = savedData.showEliminated,
-                isHost = savedData.isHost
-            )
-            _lobbyState.value = LobbyState.CONNECTED
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     fun endGame() {
-        prefs.edit().remove("saved_game").apply()
         bluetoothManager.disconnect()
         _gameState.value = GameState()
         _lobbyState.value = LobbyState.IDLE

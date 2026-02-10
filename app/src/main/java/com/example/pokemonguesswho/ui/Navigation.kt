@@ -44,10 +44,6 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         startDestination = Screen.MainMenu.route
     ) {
         composable(Screen.MainMenu.route) {
-            // Prevent back gesture from sending the app to background, which can
-            // cause a blank-screen bug when returning from the launcher.
-            BackHandler { /* consume — MainMenu is the root screen */ }
-
             MainMenuScreen(
                 viewModel = viewModel,
                 onStartGame = {
@@ -62,13 +58,6 @@ fun AppNavigation(viewModel: PokemonViewModel) {
                     viewModel.startJoinGame()
                     navController.navigate(Screen.ClientLobby.route) {
                         launchSingleTop = true
-                    }
-                },
-                onResumeGame = {
-                    if (viewModel.restoreSavedGame()) {
-                        navController.navigate(Screen.Game.route) {
-                            launchSingleTop = true
-                        }
                     }
                 }
             )
@@ -85,14 +74,10 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         }
         composable(Screen.Game.route) {
             // After process death, NavController restores the Game route but the
-            // ViewModel is fresh (empty board). Wait for Pokemon data to load,
-            // then try to restore from SharedPreferences; if that fails, go back
-            // to the main menu.
+            // ViewModel is fresh (empty board). Go back to the main menu.
             LaunchedEffect(gameState.board.isEmpty(), isShuffling, isLoading) {
                 if (gameState.board.isEmpty() && !isShuffling && !isLoading) {
-                    if (!viewModel.restoreSavedGame()) {
-                        navController.popBackStack(Screen.MainMenu.route, inclusive = false)
-                    }
+                    navController.popBackStack(Screen.MainMenu.route, inclusive = false)
                 }
             }
 
