@@ -65,6 +65,7 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
     val opponentFoundMessage by viewModel.opponentFoundMessage.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
     val gameManager = GameManager()
 
     // Show loading animation while shuffling (host navigates here immediately)
@@ -76,6 +77,20 @@ fun GameScreenUpdated(viewModel: PokemonViewModel, onEndGame: () -> Unit = {}) {
             contentAlignment = Alignment.Center
         ) {
             ShufflingAnimation(pokemon = shuffleDisplayPokemon)
+        }
+        return
+    }
+
+    // After process death: NavController restored Game route but data is still loading.
+    // Show a loading indicator until the board is restored.
+    if (gameState.board.isEmpty() && (isLoading || isShuffling)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
         }
         return
     }

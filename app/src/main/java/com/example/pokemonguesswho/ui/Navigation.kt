@@ -26,6 +26,7 @@ fun AppNavigation(viewModel: PokemonViewModel) {
     val gameState by viewModel.gameState.collectAsState()
     val lobbyState by viewModel.lobbyState.collectAsState()
     val isShuffling by viewModel.isShuffling.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     // Client flow: navigate from lobby → game when connected and board ready
     LaunchedEffect(lobbyState, gameState.board.size, isShuffling) {
@@ -43,6 +44,10 @@ fun AppNavigation(viewModel: PokemonViewModel) {
         startDestination = Screen.MainMenu.route
     ) {
         composable(Screen.MainMenu.route) {
+            // Prevent back gesture from sending the app to background, which can
+            // cause a blank-screen bug when returning from the launcher.
+            BackHandler { /* consume — MainMenu is the root screen */ }
+
             MainMenuScreen(
                 viewModel = viewModel,
                 onStartGame = {
@@ -79,6 +84,18 @@ fun AppNavigation(viewModel: PokemonViewModel) {
             )
         }
         composable(Screen.Game.route) {
+            // After process death, NavController restores the Game route but the
+            // ViewModel is fresh (empty board). Wait for Pokemon data to load,
+            // then try to restore from SharedPreferences; if that fails, go back
+            // to the main menu.
+            LaunchedEffect(gameState.board.isEmpty(), isShuffling, isLoading) {
+                if (gameState.board.isEmpty() && !isShuffling && !isLoading) {
+                    if (!viewModel.restoreSavedGame()) {
+                        navController.popBackStack(Screen.MainMenu.route, inclusive = false)
+                    }
+                }
+            }
+
             // Back press goes to main menu without losing game state (it's saved)
             BackHandler {
                 navController.popBackStack(Screen.MainMenu.route, inclusive = false)
