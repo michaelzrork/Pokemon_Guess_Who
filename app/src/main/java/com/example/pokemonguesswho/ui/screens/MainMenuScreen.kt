@@ -39,12 +39,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.pokemonguesswho.R
 import com.example.pokemonguesswho.data.GamePokemon
 import com.example.pokemonguesswho.data.PokemonViewModel
 import com.example.pokemonguesswho.ui.CustomColor
@@ -177,7 +179,7 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
         modifier = Modifier.padding(24.dp)
     ) {
         Text(
-            text = "Loading...",
+            text = stringResource(id = R.string.shuffling),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -202,12 +204,7 @@ fun ShufflingAnimation(pokemon: GamePokemon?) {
                             .padding(8.dp),
                         contentScale = ContentScale.Fit
                     )
-                    Text(
-                        text = poke.name,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+
                 }
             }
         } ?: CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)

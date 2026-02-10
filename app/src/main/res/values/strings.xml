@@ -6,6 +6,7 @@
     <string name="toggle_eliminated">Toggle Eliminated</string>
     <string name="grid_layout">Grid Layout</string>
     <string name="loading">Loading Pokemon...</string>
+    <string name="shuffling">Shuffling...</string>
     <string name="error">Error: %s</string>
     <string name="find_players">Find Players</string>
     <string name="host_game">Host Game</string>

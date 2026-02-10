@@ -406,7 +406,7 @@ private fun CompactStat(label: String, value: Int) {
  * No external assets needed.
  */
 @Composable
-fun TypeIcon(type: String, size: Dp = 18.dp) {
+fun TypeIcon(type: String, size: Dp = 18.dp, alpha: Float = 1f) {
     val typeColor = getTypeColor(type)
     val symbol = getTypeSymbol(type)
 
@@ -415,7 +415,7 @@ fun TypeIcon(type: String, size: Dp = 18.dp) {
     Box(
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.size(size)) {
+        Canvas(modifier = Modifier.size(size).graphicsLayer { this.alpha = alpha }) {
             // Filled circle background
             drawCircle(
                 color = typeColor,

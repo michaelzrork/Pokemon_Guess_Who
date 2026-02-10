@@ -6,15 +6,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,31 +19,31 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pokemonguesswho.data.GamePokemon
@@ -149,8 +145,7 @@ fun GameScreenUpdated(
             gameState.myPokemon?.let { myPoke ->
                 MyPokemonTopBar(
                     pokemon = myPoke,
-                    showEliminated = gameState.showEliminated,
-                    onToggleEliminated = { viewModel.toggleShowEliminated() }
+                    board = gameState.board
                 )
             }
 
@@ -242,13 +237,23 @@ fun OpponentFoundBanner(message: String) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MyPokemonTopBar(
     pokemon: GamePokemon,
-    showEliminated: Boolean,
-    onToggleEliminated: () -> Unit
+    board: List<GamePokemon> = emptyList()
 ) {
+    // Compute which types still have at least one non-eliminated card on the board
+    val activeTypes = remember(board) {
+        board.filter { !it.isEliminated }
+            .flatMap { it.types }
+            .map { it.lowercase() }
+            .toSet()
+    }
+
+    // Measure card column height so glossary column can match it
+    var cardColumnHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -257,82 +262,47 @@ fun MyPokemonTopBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Your Pokemon card — full-sized, matching grid cards, with gold border + label
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+        // Your Pokemon card
+        Box(
+            modifier = Modifier
+                .width(120.dp)
+                .onGloballyPositioned { coordinates ->
+                    cardColumnHeightPx = coordinates.size.height
+                }
         ) {
-            // "YOUR POKEMON" label row — shared with Type Glossary label via the parent Row alignment
-            Text(
-                text = "YOUR POKEMON",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                letterSpacing = 1.sp
+            PokemonCardComponent(
+                pokemon = pokemon,
+                onCardClick = { },
+                isSelected = true,
+                compact = false
             )
-            Spacer(modifier = Modifier.height(3.dp))
-            Box(modifier = Modifier.width(120.dp)) {
-                PokemonCardComponent(
-                    pokemon = pokemon,
-                    onCardClick = { },
-                    isSelected = true,
-                    compact = false
-                )
-            }
         }
 
-        // Type glossary + visibility toggle
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // Label row: "TYPE GLOSSARY" on left, visibility toggle on right
-            // This row aligns with "YOUR POKEMON" label since both columns start at Alignment.Top
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "TYPE GLOSSARY",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    letterSpacing = 1.sp
-                )
-                FilledIconButton(
-                    onClick = onToggleEliminated,
-                    modifier = Modifier.size(30.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = if (showEliminated)
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
-                        else
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (showEliminated) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (showEliminated) "Hide Eliminated" else "Show Eliminated",
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
+        // Type glossary — match height of card
+        val glossaryHeight = with(density) { cardColumnHeightPx.toDp() }
 
-            // 4 rows of 4 types each — starts right below the label row, aligning with top of card
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .then(if (cardColumnHeightPx > 0) Modifier.height(glossaryHeight) else Modifier)
+        ) {
+            // 4 rows of 4 types each — each row gets exact 1/4 of height
             allPokemonTypes.chunked(4).forEach { rowTypes ->
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     rowTypes.forEach { type ->
                         TypeGlossaryChip(
                             type = type,
+                            isActive = activeTypes.contains(type.lowercase()),
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(3.dp))
             }
         }
     }
@@ -345,19 +315,34 @@ private val allPokemonTypes = listOf(
 )
 
 @Composable
-private fun TypeGlossaryChip(type: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+private fun TypeGlossaryChip(
+    type: String,
+    isActive: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    val alpha = if (isActive) 1f else 0.25f
+    // Measure available height so the icon can fill remaining space after text
+    var chipHeightPx by remember { mutableIntStateOf(0) }
+    var textHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val iconSize = with(density) {
+        ((chipHeightPx - textHeightPx).coerceAtLeast(0)).toDp().coerceIn(14.dp, 32.dp)
+    }
+
+    Column(
+        modifier = modifier
+            .onGloballyPositioned { chipHeightPx = it.size.height },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        TypeIcon(type = type, size = 18.dp)
+        TypeIcon(type = type, size = iconSize, alpha = alpha)
         Text(
             text = type,
-            fontSize = 8.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
-            maxLines = 1
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (isActive) 0.85f else 0.25f),
+            maxLines = 1,
+            modifier = Modifier.onGloballyPositioned { textHeightPx = it.size.height }
         )
     }
 }
