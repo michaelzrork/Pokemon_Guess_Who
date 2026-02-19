@@ -68,6 +68,7 @@ fun GameScreenUpdated(
     val shuffleDisplayPokemon by viewModel.shuffleDisplayPokemon.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val showExitDialog by viewModel.showExitDialog.collectAsState()
+    val revealedCardIds by viewModel.revealedCardIds.collectAsState()
     val gameManager = GameManager()
 
     // Exit confirmation dialog
@@ -153,6 +154,7 @@ fun GameScreenUpdated(
             PokemonGridUpdated(
                 pokemon = gameManager.getVisiblePokemon(gameState.board, gameState.showEliminated),
                 myPokemon = gameState.myPokemon,
+                revealedCardIds = revealedCardIds,
                 onCardClick = { pokemon ->
                     viewModel.togglePokemonElimination(pokemon)
                 },
@@ -351,6 +353,7 @@ private fun TypeGlossaryChip(
 fun PokemonGridUpdated(
     pokemon: List<GamePokemon>,
     myPokemon: GamePokemon?,
+    revealedCardIds: Set<Int> = emptySet(),
     onCardClick: (GamePokemon) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -366,10 +369,12 @@ fun PokemonGridUpdated(
             key = { pokemon[it].pokemonId }
         ) { index ->
             val poke = pokemon[index]
+            val isRevealed = revealedCardIds.contains(poke.pokemonId)
             PokemonCardComponent(
                 pokemon = poke,
                 onCardClick = { onCardClick(it) },
-                isSelected = myPokemon?.pokemonId == poke.pokemonId
+                isSelected = myPokemon?.pokemonId == poke.pokemonId,
+                faceDown = !isRevealed
             )
         }
     }

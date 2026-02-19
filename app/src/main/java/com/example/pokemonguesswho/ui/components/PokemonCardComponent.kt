@@ -22,6 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -50,16 +51,26 @@ fun PokemonCardComponent(
     pokemon: GamePokemon,
     onCardClick: (GamePokemon) -> Unit,
     isSelected: Boolean = false,
-    compact: Boolean = false
+    compact: Boolean = false,
+    faceDown: Boolean = false
 ) {
     val primaryType = pokemon.types.firstOrNull() ?: "Normal"
     val typeColor = getTypeColor(primaryType)
     val borderColor = if (isSelected) CustomColor.gold else typeColor
     val borderWidth = if (isSelected) 3.dp else 2.dp
 
-    // Animate rotation: 0 = front (normal), 180 = back (eliminated)
+    // Two independent flip axes:
+    // 1. "reveal" flip: faceDown=true → 180°, faceDown=false → 0° (initial board reveal)
+    // 2. "elimination" flip: isEliminated → 180° (gameplay toggle)
+    // When faceDown, show the back. When revealed and eliminated, also show the back.
+    val targetRotation = when {
+        faceDown -> 180f
+        pokemon.isEliminated -> 180f
+        else -> 0f
+    }
+
     val rotation by animateFloatAsState(
-        targetValue = if (pokemon.isEliminated) 180f else 0f,
+        targetValue = targetRotation,
         animationSpec = tween(durationMillis = 400),
         label = "cardFlip"
     )
@@ -107,6 +118,10 @@ private fun CardFrontContent(
     typeColor: Color,
     compact: Boolean
 ) {
+    val isDark = isSystemInDarkTheme()
+    val artTintAlpha = if (isDark) 0.35f else 0.08f
+    val subtleTintAlpha = if (isDark) 0.35f else 0.12f
+
     Column(modifier = Modifier.fillMaxSize()) {
         // -- HEADER BAR: Name + HP --
         Row(
@@ -139,7 +154,7 @@ private fun CardFrontContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(typeColor.copy(alpha = 0.08f)),
+                .background(typeColor.copy(alpha = artTintAlpha)),
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
@@ -172,7 +187,7 @@ private fun CardFrontContent(
                 color = getEvolutionStageColor(pokemon.evolutionStage),
                 modifier = Modifier
                     .background(
-                        getEvolutionStageColor(pokemon.evolutionStage).copy(alpha = 0.12f),
+                        getEvolutionStageColor(pokemon.evolutionStage).copy(alpha = subtleTintAlpha),
                         RoundedCornerShape(4.dp)
                     )
                     .padding(horizontal = 4.dp, vertical = 1.dp)
@@ -184,7 +199,7 @@ private fun CardFrontContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(typeColor.copy(alpha = 0.12f))
+                    .background(typeColor.copy(alpha = subtleTintAlpha))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {

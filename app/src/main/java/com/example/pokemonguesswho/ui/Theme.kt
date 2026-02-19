@@ -80,7 +80,7 @@ fun AppTheme(
     val colorScheme = if (darkTheme) {
         darkColorScheme(
             // Primary: Pokemon Blue — used for main CTA buttons, status bars, prominent icons
-            primary = CustomColor.pokemonBlueLight,
+            primary = CustomColor.pokemonBlueDark,
             onPrimary = CustomColor.whiteDim,
             primaryContainer = CustomColor.pokemonBlue,
             onPrimaryContainer = CustomColor.white,
@@ -96,7 +96,7 @@ fun AppTheme(
             tertiaryContainer = CustomColor.pokemonYellowShadow,
             onTertiaryContainer = CustomColor.black,
             // Surfaces
-            background = CustomColor.pokemonBlueDark,
+            background = CustomColor.blackFade,
             onBackground = CustomColor.white,
             surface = CustomColor.grayDark,
             onSurface = CustomColor.white,

@@ -270,7 +270,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
         // Center button - outer ring
         drawCircle(
             color = charcoalColor,
-            radius = radius * 0.22f,
+            radius = radius * 0.30f,
             center = Offset(cx, cy),
             style = Fill
         )
@@ -278,7 +278,7 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
         // Center button - white fill
         drawCircle(
             color = whiteColor,
-            radius = radius * 0.15f,
+            radius = radius * 0.22f,
             center = Offset(cx, cy),
             style = Fill
         )
@@ -286,9 +286,9 @@ fun PokeballIcon(modifier: Modifier = Modifier) {
         // Center button - inner ring
         drawCircle(
             color = charcoalColor,
-            radius = radius * 0.15f,
+            radius = radius * 0.22f,
             center = Offset(cx, cy),
-            style = Stroke(width = strokeWidth * 0.6f)
+            style = Stroke(width = strokeWidth * 0.7f)
         )
 
         // Highlight on top-left for 3D effect

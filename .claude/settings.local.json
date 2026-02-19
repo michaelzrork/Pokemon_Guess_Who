@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "WebFetch(domain:www.pokemon.com)",
+      "WebFetch(domain:pokeapi.co)",
+      "Bash(./gradlew assembleDebug:*)",
+      "WebFetch(domain:developers.google.com)",
+      "WebFetch(domain:issuetracker.google.com)",
+      "WebFetch(domain:hanru-yeh.medium.com)",
+      "Bash(.gradlew.bat assembleDebug:*)",
+      "Bash(cmd /c \"gradlew.bat assembleDebug 2>&1\")",
+      "Bash(cmd //c gradlew.bat assembleDebug:*)",
+      "Bash(cmd.exe /c \"gradlew.bat assembleDebug\")",
+      "Bash(cmd.exe //c \"gradlew.bat assembleDebug 2>&1\")",
+      "Bash(C:/Users/micha/OneDrive/Documents/Workspace/Pokemon_Guess_Who/gradlew.bat assembleDebug)",
+      "Bash(./gradlew compileDebugKotlin:*)",
+      "Bash(./gradlew clean:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:bulbapedia.bulbagarden.net)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(.gradlew.bat compileDebugKotlin:*)",
+      "Bash(cmd /c \"gradlew.bat compileDebugKotlin 2>&1\")",
+      "Bash(./gradlew.bat compileDebugKotlin:*)",
+      "Bash(grep:*)",
+      "Bash(C:UsersmichaOneDriveDocumentsWorkspacePokemon_Guess_Whogradlew.bat assembleDebug)"
+    ]
+  }
+}

@@ -88,6 +88,14 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
     private val _showExitDialog = MutableStateFlow(false)
     val showExitDialog: StateFlow<Boolean> = _showExitDialog.asStateFlow()
 
+    // Card reveal animation: IDs of cards whose images have loaded and should flip face-up
+    private val _revealedCardIds = MutableStateFlow<Set<Int>>(emptySet())
+    val revealedCardIds: StateFlow<Set<Int>> = _revealedCardIds.asStateFlow()
+
+    // Whether the board is ready to be shown (my pokemon image loaded, board set)
+    private val _boardReady = MutableStateFlow(false)
+    val boardReady: StateFlow<Boolean> = _boardReady.asStateFlow()
+
     fun showExitConfirmation() {
         _showExitDialog.value = true
     }
@@ -161,13 +169,29 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
         } catch (_: Exception) { }
     }
 
-    /** Preload images for a list of board Pokemon, returning when all are cached. */
+    /** Preload images for a list of board Pokemon in parallel, returning when all are cached. */
     private suspend fun preloadBoardImages(board: List<GamePokemon>) {
         board.map { pokemon ->
             viewModelScope.async(Dispatchers.IO) {
                 preloadImage(pokemon.imageUrl)
             }
         }.awaitAll()
+    }
+
+    /**
+     * Preload board images one-by-one in order, revealing each card as it loads.
+     * A small stagger delay ensures the flip wave looks smooth even when images
+     * are already cached.
+     */
+    private suspend fun revealBoardImagesSequentially(board: List<GamePokemon>) {
+        for (pokemon in board) {
+            withContext(Dispatchers.IO) {
+                preloadImage(pokemon.imageUrl)
+            }
+            _revealedCardIds.value = _revealedCardIds.value + pokemon.pokemonId
+            // Small stagger so flips cascade visually even when images are cached
+            delay(60)
+        }
     }
 
     // ---- HOST FLOW ----
@@ -178,8 +202,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
      */
     fun startNewGame() {
         viewModelScope.launch {
-            // Clear any previous board
+            // Clear any previous board and reveal state
             _gameState.value = GameState()
+            _revealedCardIds.value = emptySet()
+            _boardReady.value = false
             _isShuffling.value = true
 
             val allPokemon = _pokemonList.value
@@ -189,8 +215,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             val board = gameManager.generateGameBoard(allPokemon)
             val myPokemon = board.random()
 
-            // Preload the 25 board images in parallel with the shuffle animation
-            val preloadJob = async { preloadBoardImages(board) }
+            // Preload only the selected pokemon image during shuffle
+            val myPokemonPreloadJob = async(Dispatchers.IO) {
+                preloadImage(myPokemon.imageUrl)
+            }
 
             // Shuffle animation uses Gen 1 Pokemon (already cached)
             repeat(15) {
@@ -198,10 +226,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 delay(250)
             }
 
-            // Wait for board images to finish loading (usually done by now)
-            preloadJob.await()
+            // Wait for my pokemon image to be ready
+            myPokemonPreloadJob.await()
 
-            // Animation done — set the board and stop shuffling.
+            // Set the board (all cards start face-down) and stop shuffling
             _shuffleDisplayPokemon.value = null
             _gameState.value = GameState(
                 board = board,
@@ -210,6 +238,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 isHost = true
             )
             _isShuffling.value = false
+            _boardReady.value = true
+
+            // Now reveal cards one-by-one with a flip wave
+            revealBoardImagesSequentially(board)
 
             // Start Bluetooth server for opponent to join
             _lobbyState.value = LobbyState.WAITING_FOR_OPPONENT
@@ -312,6 +344,8 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
             if (board.size < 2) return false
 
             viewModelScope.launch {
+                _revealedCardIds.value = emptySet()
+                _boardReady.value = false
                 _isShuffling.value = true
 
                 // Pick a pokemon that isn't the host's pokemon
@@ -322,8 +356,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                 }
                 val myPokemon = available.random()
 
-                // Preload board images in parallel with shuffle animation
-                val preloadJob = async { preloadBoardImages(board) }
+                // Preload only the selected pokemon image during shuffle
+                val myPokemonPreloadJob = async(Dispatchers.IO) {
+                    preloadImage(myPokemon.imageUrl)
+                }
 
                 // Shuffle animation uses Gen 1 Pokemon (already cached)
                 repeat(12) {
@@ -331,10 +367,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
                     delay(250)
                 }
 
-                // Wait for board images to finish loading
-                preloadJob.await()
+                // Wait for my pokemon image to be ready
+                myPokemonPreloadJob.await()
 
-                // Set board FIRST, then clear shuffling
+                // Set board (all cards face-down), then clear shuffling
                 _gameState.value = GameState(
                     board = board,
                     myPokemon = myPokemon,
@@ -344,6 +380,10 @@ class PokemonViewModel(application: Application) : AndroidViewModel(application)
 
                 _shuffleDisplayPokemon.value = null
                 _isShuffling.value = false
+                _boardReady.value = true
+
+                // Reveal cards one-by-one with a flip wave
+                revealBoardImagesSequentially(board)
             }
             true
         } catch (e: Exception) {
